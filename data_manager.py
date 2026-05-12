@@ -13,9 +13,19 @@ CACHE_EXPIRY_DAYS = 7
 class DataManager:
     def __init__(self):
         DATA_DIR.mkdir(exist_ok=True)
-        self.history = self._load(HISTORY_FILE, [])
+        self.history   = self._load(HISTORY_FILE,   [])
         self.favorites = self._load(FAVORITES_FILE, {})
-        self.cache = self._load(CACHE_FILE, {})
+        self._cache    = None   # lazy: loaded only on first word lookup
+
+    @property
+    def cache(self):
+        if self._cache is None:
+            self._cache = self._load(CACHE_FILE, {})
+        return self._cache
+
+    @cache.setter
+    def cache(self, value):
+        self._cache = value
 
     def _load(self, path, default):
         try:

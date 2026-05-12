@@ -15,11 +15,11 @@ from AppKit import (
     NSWindowStyleMaskMiniaturizable,
     NSWindowStyleMaskResizable,
     NSBackingStoreBuffered,
-    NSSplitView,
     NSView,
     NSScrollView,
     NSTableView,
     NSTableColumn,
+    NSTableRowView,
     NSTextField,
     NSButton,
     NSSegmentedControl,
@@ -129,8 +129,79 @@ class _HoverFavButton(NSButton):
         objc.super(_HoverFavButton, self).drawRect_(rect)
 
 
-def _btn(title, target, action, frame, small=False):
-    b = NSButton.alloc().initWithFrame_(frame)
+class _HoverBtn(NSButton):
+    """NSButton with subtle hover background."""
+    def initWithFrame_(self, frame):
+        self = objc.super(_HoverBtn, self).initWithFrame_(frame)
+        if self is None:
+            return None
+        self.setWantsLayer_(True)
+        self.layer().setCornerRadius_(6)
+        ta = NSTrackingArea.alloc().initWithRect_options_owner_userInfo_(
+            self.bounds(), 0x01 | 0x80, self, None)
+        self.addTrackingArea_(ta)
+        return self
+
+    def mouseEntered_(self, event):
+        self.layer().setBackgroundColor_(
+            NSColor.colorWithWhite_alpha_(0.5, 0.10).CGColor())
+
+    def mouseExited_(self, event):
+        self.layer().setBackgroundColor_(
+            NSColor.colorWithWhite_alpha_(0, 0).CGColor())
+
+
+class _WordRowView(NSView):
+    """Cell view: word label + × delete button (visibility driven by _HoverRowView)."""
+
+    def initWithFrame_(self, frame):
+        self = objc.super(_WordRowView, self).initWithFrame_(frame)
+        if self is None:
+            return None
+        w = frame.size.width
+
+        lbl = NSTextField.alloc().initWithFrame_(NSMakeRect(8, 3, w - 34, 18))
+        lbl.setBezeled_(False); lbl.setDrawsBackground_(False)
+        lbl.setEditable_(False); lbl.setSelectable_(False)
+        lbl.setFont_(NSFont.systemFontOfSize_(13))
+        lbl.setAutoresizingMask_(2)
+        self.addSubview_(lbl)
+        self._lbl = lbl
+
+        del_btn = NSButton.alloc().initWithFrame_(NSMakeRect(w - 26, 2, 20, 20))
+        del_btn.setTitle_("×")
+        del_btn.setBordered_(False)
+        del_btn.setFont_(NSFont.systemFontOfSize_(15))
+        del_btn.setContentTintColor_(NSColor.secondaryLabelColor())
+        del_btn.setHidden_(True)
+        del_btn.setAutoresizingMask_(1 | 4)
+        self.addSubview_(del_btn)
+        self._del_btn = del_btn
+        return self
+
+    @objc.python_method
+    def configure(self, word, row, target):
+        self._lbl.setStringValue_(word)
+        self._del_btn.setTag_(row)
+        self._del_btn.setTarget_(target)
+        self._del_btn.setAction_("deleteSelectedWord:")
+
+
+class _HoverRowView(NSTableRowView):
+    """NSTableRowView — NSTableView updates mouseHover automatically."""
+
+    def setMouseHover_(self, hovered):
+        objc.super(_HoverRowView, self).setMouseHover_(hovered)
+        try:
+            cell = self.viewAtColumn_(0)
+            if cell and hasattr(cell, "_del_btn"):
+                cell._del_btn.setHidden_(not hovered)
+        except Exception:
+            pass
+
+
+def _btn(title, target, action, frame):
+    b = _HoverBtn.alloc().initWithFrame_(frame)
     b.setTitle_(title)
     b.setBezelStyle_(NSBezelStyleRounded)
     b.setButtonType_(NSButtonTypeMomentaryLight)
@@ -153,7 +224,11 @@ class MainWindowController(NSObject):
         self._list_data    = []
         self._current_word = ""
         self._current_data = None
+        self._reloading    = False
         self._window       = None
+        self._right_view   = None
+        self._sidebar_view = None
+        self._sep_main     = None
         self._table        = None
         self._seg          = None
         self._clear_btn    = None
@@ -170,7 +245,7 @@ class MainWindowController(NSObject):
     def _build(self):
         screen = NSScreen.mainScreen()
         sf  = screen.visibleFrame() if screen else NSMakeRect(0, 0, 1280, 800)
-        cw, ch = 920, 620
+        cw, ch = MIN_WIN_W, MIN_WIN_H
         x = sf.origin.x + (sf.size.width  - cw) / 2
         y = sf.origin.y + (sf.size.height - ch) / 2
 
@@ -181,21 +256,14 @@ class MainWindowController(NSObject):
         win.setTitle_("Cambridge")
         win.setMinSize_(NSMakeSize(MIN_WIN_W, MIN_WIN_H))
         win.setReleasedWhenClosed_(False)
+        win.setRestorable_(False)
         win.setDelegate_(self)
 
         content = win.contentView()
 
-        # ── NSSplitView fills full content area ────────────────────────────
-        split = NSSplitView.alloc().initWithFrame_(NSMakeRect(0, 0, cw, ch))
-        split.setVertical_(True)
-        split.setDividerStyle_(1)
-        split.setDelegate_(self)
-        split.setAutoresizingMask_(2 | 16)
-        content.addSubview_(split)
-
-        # ── Left panel ─────────────────────────────────────────────────────
-        left = NSView.alloc().initWithFrame_(NSMakeRect(0, 0, LEFT_W, ch))
-        left.setAutoresizingMask_(16)
+        # ── 侧边栏（右侧固定宽度）─────────────────────────────────────────
+        left = NSView.alloc().initWithFrame_(NSMakeRect(cw - LEFT_W, 0, LEFT_W, ch))
+        left.setAutoresizingMask_(1 | 16)   # 左边距弹性 + 高度弹性 → 钉在右边
 
         # [历史][收藏] segment — pin to top
         seg = NSSegmentedControl.alloc().initWithFrame_(
@@ -209,30 +277,18 @@ class MainWindowController(NSObject):
         seg.setAutoresizingMask_(2 | 8)
         left.addSubview_(seg)
 
-        # [清空] [导出] — small inline-style buttons, pin to top
-        clear_btn = _btn("清空", self, "clearList:",
-                         NSMakeRect(8, ch - 62, 52, 20))
-        clear_btn.setFont_(NSFont.systemFontOfSize_(11))
-        clear_btn.setAutoresizingMask_(8)
-        left.addSubview_(clear_btn)
+        # Thin separator — aligned with right panel divider at ch-RIGHT_HDR-1
+        sep_top = NSView.alloc().initWithFrame_(
+            NSMakeRect(0, ch - RIGHT_HDR - 1, LEFT_W, 1))
+        sep_top.setWantsLayer_(True)
+        sep_top.layer().setBackgroundColor_(NSColor.separatorColor().CGColor())
+        sep_top.setAutoresizingMask_(2 | 8)
+        left.addSubview_(sep_top)
 
-        export_btn = _btn("导出", self, "exportFavorites:",
-                          NSMakeRect(64, ch - 62, 52, 20))
-        export_btn.setFont_(NSFont.systemFontOfSize_(11))
-        export_btn.setAutoresizingMask_(8)
-        export_btn.setHidden_(True)
-        left.addSubview_(export_btn)
-
-        # Thin separator under buttons
-        sep_left = NSView.alloc().initWithFrame_(NSMakeRect(0, ch - 68, LEFT_W, 1))
-        sep_left.setWantsLayer_(True)
-        sep_left.layer().setBackgroundColor_(NSColor.separatorColor().CGColor())
-        sep_left.setAutoresizingMask_(2 | 8)
-        left.addSubview_(sep_left)
-
-        # Word list scroll + table — fill remaining space
+        # Word list scroll + table — fills between top and bottom areas
+        _BTN_H = 36     # height reserved at bottom for action buttons
         list_scroll = NSScrollView.alloc().initWithFrame_(
-            NSMakeRect(0, 0, LEFT_W, ch - 70))
+            NSMakeRect(0, _BTN_H, LEFT_W, ch - RIGHT_HDR - 1 - _BTN_H))
         list_scroll.setHasVerticalScroller_(True)
         list_scroll.setAutohidesScrollers_(True)
         list_scroll.setBorderType_(0)
@@ -255,23 +311,48 @@ class MainWindowController(NSObject):
         list_scroll.setDocumentView_(table)
         left.addSubview_(list_scroll)
 
-        # ── Right panel ────────────────────────────────────────────────────
+        # Thin separator above button area — pin to bottom
+        sep_bottom = NSView.alloc().initWithFrame_(NSMakeRect(0, _BTN_H - 1, LEFT_W, 1))
+        sep_bottom.setWantsLayer_(True)
+        sep_bottom.layer().setBackgroundColor_(NSColor.separatorColor().CGColor())
+        sep_bottom.setAutoresizingMask_(2 | 32)   # 32 = MaxYMargin = pin to bottom
+        left.addSubview_(sep_bottom)
+
+        # [清空] centered at bottom — pin to bottom
+        _BW = 54
+        clear_btn = _btn("清空", self, "clearList:",
+                         NSMakeRect((LEFT_W - _BW) / 2, 8, _BW, 22))
+        clear_btn.setFont_(NSFont.systemFontOfSize_(11))
+        clear_btn.setAutoresizingMask_(1 | 4 | 32)   # left+right flex + pin to bottom
+        left.addSubview_(clear_btn)
+
+        # [导出] — only visible in favorites mode, starts hidden
+        export_btn = _btn("导出", self, "exportFavorites:",
+                          NSMakeRect((LEFT_W + _BW + 6) / 2, 8, _BW, 22))
+        export_btn.setFont_(NSFont.systemFontOfSize_(11))
+        export_btn.setAutoresizingMask_(1 | 4 | 32)
+        export_btn.setHidden_(True)
+        left.addSubview_(export_btn)
+
+        # ── 内容区（左侧，宽度弹性填满剩余空间）──────────────────────────
         right_w = cw - LEFT_W - 1
-        right = NSView.alloc().initWithFrame_(
-            NSMakeRect(LEFT_W + 1, 0, right_w, ch))
-        right.setAutoresizingMask_(2 | 16)
+        right = NSView.alloc().initWithFrame_(NSMakeRect(0, 0, right_w, ch))
+        right.setAutoresizingMask_(2 | 16)  # 宽度弹性 + 高度弹性
 
         # Header: search field + [查询] + [★]  — pin to top
         hdr_y = ch - RIGHT_HDR
         hdr = NSView.alloc().initWithFrame_(NSMakeRect(0, hdr_y, right_w, RIGHT_HDR))
         hdr.setAutoresizingMask_(2 | 8)
 
-        fld_w = right_w - 126
+        # 布局：[搜索框(弹性)] [查询] [★] [☰]，右侧三个按钮钉在右边
+        # 右侧固定宽度：52(查询)+8+32(★)+8+32(☰)+8 = 140
+        fld_w = right_w - 8 - 8 - 52 - 8 - 32 - 8 - 32 - 8   # = right_w - 156
+
         search_field = NSTextField.alloc().initWithFrame_(
-            NSMakeRect(12, 11, fld_w, 28))
+            NSMakeRect(8, 11, fld_w, 28))
         search_field.setPlaceholderString_("输入单词… 回车或点击查询")
         search_field.setBezeled_(True)
-        search_field.setBezelStyle_(1)  # NSTextFieldRoundedBezel
+        search_field.setBezelStyle_(1)
         search_field.setEditable_(True)
         search_field.setContinuous_(False)
         search_field.setTarget_(self)
@@ -280,17 +361,27 @@ class MainWindowController(NSObject):
         hdr.addSubview_(search_field)
 
         query_btn = _btn("查询", self, "searchBtnClick:",
-                         NSMakeRect(fld_w + 18, 12, 52, 26))
-        query_btn.setAutoresizingMask_(4 | 8)
+                         NSMakeRect(right_w - 140, 12, 52, 26))
+        query_btn.setAutoresizingMask_(1 | 8)
         hdr.addSubview_(query_btn)
 
         fav_btn = _HoverFavButton.alloc().initWithFrame_(
-            NSMakeRect(right_w - 44, 9, 32, 32))
+            NSMakeRect(right_w - 80, 9, 32, 32))
         fav_btn.setTarget_(self)
         fav_btn.setAction_("toggleFavorite:")
-        fav_btn.setAutoresizingMask_(4 | 8)
+        fav_btn.setAutoresizingMask_(1 | 8)
         fav_btn.setToolTip_("收藏 / 取消收藏")
         hdr.addSubview_(fav_btn)
+
+        sidebar_btn = _HoverFavButton.alloc().initWithFrame_(NSMakeRect(right_w - 40, 9, 32, 32))
+        sidebar_btn.setTitle_("☰")
+        sidebar_btn.setFont_(NSFont.systemFontOfSize_(16))
+        sidebar_btn.setContentTintColor_(NSColor.secondaryLabelColor())
+        sidebar_btn.setToolTip_("显示/隐藏侧边栏")
+        sidebar_btn.setTarget_(self)
+        sidebar_btn.setAction_("toggleSidebar:")
+        sidebar_btn.setAutoresizingMask_(1 | 8)
+        hdr.addSubview_(sidebar_btn)
 
         right.addSubview_(hdr)
 
@@ -309,11 +400,27 @@ class MainWindowController(NSObject):
         right.addSubview_(scroll_content)
         update_word_view(tv, None)
 
-        # ── Assemble split ─────────────────────────────────────────────────
-        split.addSubview_(left)
-        split.addSubview_(right)
+        # ── 竖向分隔线（内容区右边缘，钉在右侧）──────────────────────────
+        sep_main = NSView.alloc().initWithFrame_(
+            NSMakeRect(cw - LEFT_W - 1, 0, 1, ch))
+        sep_main.setWantsLayer_(True)
+        sep_main.layer().setBackgroundColor_(NSColor.separatorColor().CGColor())
+        sep_main.setAutoresizingMask_(1 | 16)   # 左边距弹性 + 高度弹性
+
+        # 默认隐藏侧边栏，内容区撑满全宽
+        sep_main.setHidden_(True)
+        left.setHidden_(True)
+        right.setFrame_(NSMakeRect(0, 0, cw, ch))
+
+        # ── 直接拼入 content view ─────────────────────────────────────────
+        content.addSubview_(right)
+        content.addSubview_(sep_main)
+        content.addSubview_(left)
 
         self._window       = win
+        self._right_view   = right
+        self._sep_main     = sep_main
+        self._sidebar_view = left
         self._table        = table
         self._seg          = seg
         self._clear_btn    = clear_btn
@@ -322,19 +429,15 @@ class MainWindowController(NSObject):
         self._fav_btn      = fav_btn
         self._content_tv   = tv
 
+
     # ── NSWindowDelegate ──────────────────────────────────────────────────────
 
     def windowShouldClose_(self, sender):
         self._window.orderOut_(None)
         return False
 
-    # ── NSSplitViewDelegate ───────────────────────────────────────────────────
-
-    def splitView_constrainMinCoordinate_ofSubviewAt_(self, sv, proposed, idx):
-        return 150 if idx == 0 else proposed
-
-    def splitView_constrainMaxCoordinate_ofSubviewAt_(self, sv, proposed, idx):
-        return 320 if idx == 0 else proposed
+    def windowDidResize_(self, notification):
+        self._repositionBottomButtons()
 
     # ── NSTableViewDataSource ─────────────────────────────────────────────────
 
@@ -348,27 +451,69 @@ class MainWindowController(NSObject):
 
     # ── NSTableViewDelegate ───────────────────────────────────────────────────
 
+    def tableView_rowViewForRow_(self, tv, row):
+        rv = tv.makeViewWithIdentifier_owner_("HR", self)
+        if rv is None:
+            rv = _HoverRowView.alloc().initWithFrame_(NSMakeRect(0, 0, LEFT_W, 24))
+            rv.setIdentifier_("HR")
+        return rv
+
     def tableView_viewForTableColumn_row_(self, tv, col, row):
-        cell = tv.makeViewWithIdentifier_owner_("WC", self)
+        cell = tv.makeViewWithIdentifier_owner_("WR", self)
         if cell is None:
-            cell = _Cell.alloc().initWithFrame_(NSMakeRect(0, 0, LEFT_W, 24))
-            cell.setIdentifier_("WC")
+            cell = _WordRowView.alloc().initWithFrame_(NSMakeRect(0, 0, LEFT_W, 24))
+            cell.setIdentifier_("WR")
         if 0 <= row < len(self._list_data):
-            cell.setStringValue_(self._list_data[row])
+            cell.configure(self._list_data[row], row, self)
         return cell
 
     def tableViewSelectionDidChange_(self, notification):
+        if self._reloading:
+            return
         row = self._table.selectedRow()
         if 0 <= row < len(self._list_data) and self._delegate:
-            self._delegate.lookupWordInMainWindow_(self._list_data[row])
+            word = self._list_data[row]
+            self._search_field.setStringValue_(word)
+            self._delegate.lookupWordInMainWindow_(word)
 
     # ── Actions ───────────────────────────────────────────────────────────────
 
     @objc.IBAction
+    def toggleSidebar_(self, sender):
+        win_w = self._window.contentView().frame().size.width
+        if self._sidebar_view.isHidden():
+            new_right_w = win_w - LEFT_W - 1
+            r = self._right_view.frame()
+            self._right_view.setFrame_(NSMakeRect(0, 0, new_right_w, r.size.height))
+            self._sep_main.setHidden_(False)
+            self._sidebar_view.setHidden_(False)
+        else:
+            r = self._right_view.frame()
+            self._right_view.setFrame_(NSMakeRect(0, 0, win_w, r.size.height))
+            self._sep_main.setHidden_(True)
+            self._sidebar_view.setHidden_(True)
+
+    @objc.IBAction
     def segmentChanged_(self, sender):
         self._mode = "history" if sender.selectedSegment() == 0 else "favorites"
-        self._export_btn.setHidden_(self._mode != "favorites")
+        self._repositionBottomButtons()
         self.refreshList()
+
+    @objc.python_method
+    def _repositionBottomButtons(self):
+        if self._clear_btn is None:
+            return
+        bw, gap, y, h = 54, 6, 8, 22
+        panel_w = self._clear_btn.superview().frame().size.width
+        show_export = self._mode == "favorites"
+        if show_export:
+            x0 = (panel_w - 2 * bw - gap) / 2
+            self._clear_btn.setFrame_(NSMakeRect(x0, y, bw, h))
+            self._export_btn.setFrame_(NSMakeRect(x0 + bw + gap, y, bw, h))
+            self._export_btn.setHidden_(False)
+        else:
+            self._clear_btn.setFrame_(NSMakeRect((panel_w - bw) / 2, y, bw, h))
+            self._export_btn.setHidden_(True)
 
     @objc.IBAction
     def clearList_(self, sender):
@@ -461,7 +606,9 @@ class MainWindowController(NSObject):
         self._list_data = (
             dm.get_history() if self._mode == "history" else dm.get_favorites()
         )
+        self._reloading = True
         self._table.reloadData()
+        self._reloading = False
 
     @objc.python_method
     def refreshHistory(self):
@@ -500,8 +647,10 @@ class MainWindowController(NSObject):
 
     @objc.python_method
     def showWindow(self):
-        NSApplication.sharedApplication().activateIgnoringOtherApps_(True)
+        app = NSApplication.sharedApplication()
+        app.activateIgnoringOtherApps_(True)
         self._window.orderFrontRegardless()
+        self._window.makeKeyAndOrderFront_(None)
         self._window.makeFirstResponder_(self._search_field)
 
     @objc.python_method

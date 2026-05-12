@@ -105,7 +105,8 @@ def scrape_cambridge(word: str) -> dict:
             label    = _text(lab_el) if lab_el else ""
 
             # Extra usage note (e.g. "not usually before noun")
-            gc_el    = db.select_one(".gc.dgc") or db.select_one(".usage.dusage")
+            # .gc.dgc is the grammar code element (same info as .gram.dgram) — skip it
+            gc_el    = db.select_one(".usage.dusage")
             usage    = _text(gc_el) if gc_el else ""
 
             examples = []

@@ -37,6 +37,18 @@ _KEYCODE_C = 8          # always Cmd+C for clipboard simulation
 _PID_FILE  = Path.home() / ".cambridge_tool" / "app.pid"
 
 
+class _HotkeyShim(NSObject):
+    """Routes hotkeyTriggered() to a Python callback, decoupling the two monitors."""
+
+    @objc.python_method
+    def setup(self, cb):
+        self._cb = cb
+
+    def hotkeyTriggered(self):
+        if hasattr(self, "_cb"):
+            self._cb()
+
+
 class AppDelegate(NSObject):
 
     # ── NSApplicationDelegate ─────────────────────────────────────────────────
@@ -53,20 +65,11 @@ class AppDelegate(NSObject):
         btn = self._status_item.button()
         btn.setTitle_("词")
         btn.setFont_(NSFont.boldSystemFontOfSize_(14))
-        btn.setToolTip_("Cambridge\n左键：显示/隐藏主界面\n右键：菜单")
-        btn.setTarget_(self)
-        btn.setAction_("statusBarClicked:")
-        btn.sendActionOn_(3)    # left + right mouse down
+        btn.setToolTip_("Cambridge 词典\n左键：显示主界面\n右键：菜单")
 
         # ── 右键菜单 ────────────────────────────────────────────────────────
         menu = NSMenu.alloc().init()
-
-        item_show = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
-            "显示主界面", "toggleMainWindow:", "")
-        item_show.setTarget_(self)
-        menu.addItem_(item_show)
-
-        menu.addItem_(NSMenuItem.separatorItem())
+        menu.setDelegate_(self)     # menuWillOpen_ intercepts left-click
 
         item_prefs = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
             "偏好设置…", "openSettings:", "")
@@ -80,6 +83,7 @@ class AppDelegate(NSObject):
         item_quit.setTarget_(self)
         menu.addItem_(item_quit)
         self._menu = menu
+        self._status_item.setMenu_(menu)    # macOS handles right-click automatically
 
         # ── 窗口 ────────────────────────────────────────────────────────────
         self.main_window = MainWindowController.alloc().init()
@@ -92,14 +96,24 @@ class AppDelegate(NSObject):
         self._settings_win = SettingsWindowController.alloc(
             ).initWithSettings_delegate_(self.settings, self)
 
-        # ── 全局快捷键 ───────────────────────────────────────────────────────
+        # ── 全局快捷键：划词查询 ─────────────────────────────────────────────
         self._hotkey = HotkeyMonitor.alloc().initWithDelegate_keycode_modifiers_(
             self, self.settings.hotkey_keycode, self.settings.hotkey_modifiers)
+
+        # ── 全局快捷键：呼出主界面 ───────────────────────────────────────────
+        self._show_shim = _HotkeyShim.alloc().init()
+        self._show_shim.setup(self._onShowWindowHotkey)
+        self._show_hotkey = HotkeyMonitor.alloc().initWithDelegate_keycode_modifiers_(
+            self._show_shim,
+            self.settings.show_window_keycode,
+            self.settings.show_window_modifiers,
+        )
 
         # ── 主菜单（使 Cmd+C/V/X/A 在文本框中生效）──────────────────────────
         self._buildMainMenu()
 
-        # ── 启动时显示主界面 ─────────────────────────────────────────────────
+        # ── 启动时显示主界面并填充列表 ───────────────────────────────────────
+        self.main_window.refreshList()
         self.main_window.showWindow()
 
         self._checkAccessibility()
@@ -113,16 +127,14 @@ class AppDelegate(NSObject):
         except Exception:
             pass
 
-    # ── 状态栏点击 ────────────────────────────────────────────────────────────
+    # ── NSMenuDelegate — 拦截左键，让右键正常弹菜单 ───────────────────────────
 
-    @objc.IBAction
-    def statusBarClicked_(self, sender):
-        from AppKit import NSApp, NSRightMouseDown
+    def menuWillOpen_(self, menu):
+        from AppKit import NSApp
         event = NSApp.currentEvent()
-        if event and event.type() == NSRightMouseDown:
-            self._status_item.popUpStatusItemMenu_(self._menu)
-        else:
-            self.main_window.toggleVisible()
+        if event and event.type() == 1:     # NSEventTypeLeftMouseDown
+            menu.cancelTracking()
+            self.main_window.showWindow()
 
     @objc.IBAction
     def toggleMainWindow_(self, sender):
@@ -140,11 +152,11 @@ class AppDelegate(NSObject):
 
     @objc.python_method
     def hotkeyTriggered(self):
+        self.main_window.showWindow()
         word = self._getSelectedText()
         if word:
             word = word.strip()
         if word:
-            self.main_window.showWindow()
             self.lookupWordInMainWindow_(word)
 
     # ── 设置回调 ──────────────────────────────────────────────────────────────
@@ -155,6 +167,17 @@ class AppDelegate(NSObject):
             self._hotkey.stop()
         self._hotkey = HotkeyMonitor.alloc().initWithDelegate_keycode_modifiers_(
             self, keycode, modifiers)
+
+    @objc.python_method
+    def applyNewShowWindowHotkey(self, keycode: int, modifiers: list):
+        if self._show_hotkey:
+            self._show_hotkey.stop()
+        self._show_hotkey = HotkeyMonitor.alloc().initWithDelegate_keycode_modifiers_(
+            self._show_shim, keycode, modifiers)
+
+    @objc.python_method
+    def _onShowWindowHotkey(self):
+        self.main_window.showWindow()
 
     # ── 查词流水线 ────────────────────────────────────────────────────────────
 
@@ -283,16 +306,19 @@ class AppDelegate(NSObject):
 
     @objc.python_method
     def _checkAccessibility(self):
+        # AXTrustedCheckOptionPrompt=True 让系统自动弹出辅助功能授权对话框
         trusted = Quartz.AXIsProcessTrustedWithOptions(
-            {"AXTrustedCheckOptionPrompt": False})
+            {"AXTrustedCheckOptionPrompt": True})
         if not trusted:
-            hotkey_str = self.settings.hotkey_display_string()
+            lookup_str = self.settings.hotkey_display_string()
+            show_str   = self.settings.show_window_display_string()
             alert = NSAlert.alloc().init()
-            alert.setMessageText_("需要辅助功能权限")
+            alert.setMessageText_("需要辅助功能权限以启用全局快捷键")
             alert.setInformativeText_(
-                f"为使用全局快捷键 {hotkey_str} 划词查询，请前往\n"
-                "系统设置 → 隐私与安全性 → 辅助功能\n"
-                "将本应用添加到允许列表，然后重启应用。"
+                f"快捷键（{lookup_str} 划词查询、{show_str} 呼出界面）"
+                "需要辅助功能权限。\n\n"
+                "系统已弹出授权对话框，请在「系统设置 → 隐私与安全性 → 辅助功能」"
+                "中勾选本应用，然后重启应用即可生效。"
             )
             alert.addButtonWithTitle_("好的")
             alert.addButtonWithTitle_("打开系统设置")

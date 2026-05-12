@@ -20,7 +20,7 @@ OPTIONS = {
         "CFBundleVersion": "1.0.0",
         "CFBundleShortVersionString": "1.0",
         "NSHumanReadableCopyright": "",
-        "LSUIElement": True,
+        "LSUIElement": False,
         "NSHighResolutionCapable": True,
         "NSAccessibilityUsageDescription": "需要辅助功能权限以使用全局快捷键 ⌘⇧F 查词。",
         "NSAppleEventsUsageDescription": "需要自动化权限以读取所选文字。",

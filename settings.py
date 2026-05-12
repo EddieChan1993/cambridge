@@ -47,6 +47,8 @@ SYSTEM_CONFLICTS: dict[tuple, str] = {
 DEFAULTS = {
     "hotkey_keycode": 8,          # C key
     "hotkey_modifiers": ["cmd", "shift"],
+    "show_window_keycode": 49,    # Space key
+    "show_window_modifiers": ["cmd", "alt"],
 }
 
 
@@ -97,3 +99,19 @@ class Settings:
 
     def hotkey_display_string(self) -> str:
         return hotkey_display(self.hotkey_keycode, self.hotkey_modifiers)
+
+    @property
+    def show_window_keycode(self) -> int:
+        return self._data.get("show_window_keycode", DEFAULTS["show_window_keycode"])
+
+    @property
+    def show_window_modifiers(self) -> list:
+        return self._data.get("show_window_modifiers", DEFAULTS["show_window_modifiers"])
+
+    def set_show_window_hotkey(self, keycode: int, modifiers: list):
+        self._data["show_window_keycode"]   = keycode
+        self._data["show_window_modifiers"] = list(modifiers)
+        self.save()
+
+    def show_window_display_string(self) -> str:
+        return hotkey_display(self.show_window_keycode, self.show_window_modifiers)
