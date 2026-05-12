@@ -23,7 +23,7 @@ from AppKit import (
 
 from settings import Settings, hotkey_display, check_conflict
 
-W, H = 400, 290
+W, H = 440, 380
 
 
 class SettingsWindowController(NSObject):
@@ -49,6 +49,7 @@ class SettingsWindowController(NSObject):
         self._show_field        = None
         self._show_conflict     = None
         self._show_record_btn   = None
+        self._url_field         = None
         self._build()
         return self
 
@@ -177,6 +178,37 @@ class SettingsWindowController(NSObject):
         save_btn.setKeyEquivalent_("\r")
         c.addSubview_(save_btn)
 
+        # ── Separator ────────────────────────────────────────────────────────
+        sep2 = NSTextField.alloc().initWithFrame_(NSMakeRect(20, H-246, W-40, 1))
+        sep2.setBezeled_(False); sep2.setDrawsBackground_(True)
+        sep2.setEditable_(False); sep2.setSelectable_(False)
+        sep2.setBackgroundColor_(NSColor.separatorColor())
+        c.addSubview_(sep2)
+
+        # ── Section 3: 查询接口地址 ──────────────────────────────────────────
+        c.addSubview_(_static("查询接口地址", 20, H-268, 200, 18, bold=True))
+        c.addSubview_(_static("修改后将在下次查词时生效，留空则恢复默认。",
+                              20, H-288, W-40, 16, size=11,
+                              color=NSColor.secondaryLabelColor()))
+
+        url_field = NSTextField.alloc().initWithFrame_(NSMakeRect(20, H-320, W-40, 26))
+        url_field.setStringValue_(self._settings.lookup_base_url)
+        url_field.setBezeled_(True)
+        url_field.setBezelStyle_(1)
+        url_field.setEditable_(True)
+        url_field.setFont_(NSFont.monospacedSystemFontOfSize_weight_(11, 0.0))
+        url_field.setPlaceholderString_("https://dictionary.cambridge.org/...")
+        c.addSubview_(url_field)
+
+        reset_btn = NSButton.alloc().initWithFrame_(NSMakeRect(20, H-352, 80, 22))
+        reset_btn.setTitle_("恢复默认")
+        reset_btn.setBezelStyle_(NSBezelStyleRounded)
+        reset_btn.setButtonType_(NSButtonTypeMomentaryLight)
+        reset_btn.setFont_(NSFont.systemFontOfSize_(11))
+        reset_btn.setTarget_(self)
+        reset_btn.setAction_("resetURL:")
+        c.addSubview_(reset_btn)
+
         self._window         = win
         self._hotkey_field   = hotkey_field
         self._conflict_label = conflict_label
@@ -184,6 +216,7 @@ class SettingsWindowController(NSObject):
         self._show_field     = show_field
         self._show_conflict  = show_conflict
         self._show_record_btn = show_record_btn
+        self._url_field      = url_field
 
     # ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -312,6 +345,11 @@ class SettingsWindowController(NSObject):
         self._window.orderOut_(None)
 
     @objc.IBAction
+    def resetURL_(self, sender):
+        from settings import DEFAULT_LOOKUP_URL
+        self._url_field.setStringValue_(DEFAULT_LOOKUP_URL)
+
+    @objc.IBAction
     def saveSettings_(self, sender):
         self._stop_recording()
         self._stop_recording_show()
@@ -324,6 +362,9 @@ class SettingsWindowController(NSObject):
         if self._delegate and hasattr(self._delegate, "applyNewShowWindowHotkey"):
             self._delegate.applyNewShowWindowHotkey(
                 self._pending_show_keycode, self._pending_show_modifiers)
+        url = self._url_field.stringValue().strip()
+        from settings import DEFAULT_LOOKUP_URL
+        self._settings.set_lookup_base_url(url if url else DEFAULT_LOOKUP_URL)
         self._window.orderOut_(None)
 
     # ── NSWindowDelegate ──────────────────────────────────────────────────────
@@ -343,5 +384,6 @@ class SettingsWindowController(NSObject):
         self._pending_show_modifiers = list(self._settings.show_window_modifiers)
         self._refresh_display()
         self._refresh_show_display()
+        self._url_field.setStringValue_(self._settings.lookup_base_url)
         NSApplication.sharedApplication().activateIgnoringOtherApps_(True)
         self._window.orderFrontRegardless()

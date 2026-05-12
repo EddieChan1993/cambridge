@@ -44,11 +44,17 @@ SYSTEM_CONFLICTS: dict[tuple, str] = {
     (12, frozenset(["cmd", "shift"])): "Cmd+Shift+Q（注销）",
 }
 
+DEFAULT_LOOKUP_URL = (
+    "https://dictionary.cambridge.org/zhs/"
+    "%E8%AF%8D%E5%85%B8/%E8%8B%B1%E8%AF%AD-%E6%B1%89%E8%AF%AD-%E7%B9%81%E4%BD%93"
+)
+
 DEFAULTS = {
     "hotkey_keycode": 8,          # C key
     "hotkey_modifiers": ["cmd", "shift"],
     "show_window_keycode": 49,    # Space key
     "show_window_modifiers": ["cmd", "alt"],
+    "lookup_base_url": DEFAULT_LOOKUP_URL,
 }
 
 
@@ -115,3 +121,11 @@ class Settings:
 
     def show_window_display_string(self) -> str:
         return hotkey_display(self.show_window_keycode, self.show_window_modifiers)
+
+    @property
+    def lookup_base_url(self) -> str:
+        return self._data.get("lookup_base_url", DEFAULT_LOOKUP_URL)
+
+    def set_lookup_base_url(self, url: str):
+        self._data["lookup_base_url"] = url.strip().rstrip("/")
+        self.save()

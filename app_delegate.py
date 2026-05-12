@@ -200,10 +200,13 @@ class AppDelegate(NSObject):
         def _run():
             from scraper import scrape_cambridge
             cached = self.data_manager.get_cached(word)
-            result = cached if cached else scrape_cambridge(word)
-            if not cached and ("error" not in result or result.get("entries")):
+            result = cached if cached else scrape_cambridge(
+                word, self.settings.lookup_base_url)
+            has_entries = bool(result.get("entries"))
+            if not cached and has_entries:
                 self.data_manager.set_cached(word, result)
-            self.data_manager.add_history(word)
+            if has_entries:
+                self.data_manager.add_history(word)
 
             def _update():
                 if target == "panel":

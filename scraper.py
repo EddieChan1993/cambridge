@@ -7,7 +7,7 @@ import re
 import requests
 from bs4 import BeautifulSoup
 
-BASE_URL = (
+_DEFAULT_BASE_URL = (
     "https://dictionary.cambridge.org/zhs/"
     "%E8%AF%8D%E5%85%B8/%E8%8B%B1%E8%AF%AD-%E6%B1%89%E8%AF%AD-%E7%B9%81%E4%BD%93"
 )
@@ -33,15 +33,22 @@ def _text(el, sep=" ") -> str:
     return text
 
 
-def scrape_cambridge(word: str) -> dict:
-    url = f"{BASE_URL}/{word.lower().strip()}"
+def scrape_cambridge(word: str, base_url: str = "") -> dict:
+    base = base_url.strip().rstrip("/") if base_url else _DEFAULT_BASE_URL
+    url = f"{base}/{word.lower().strip()}"
     result = {"word": word.strip(), "url": url, "pronunciations": [], "entries": []}
 
-    try:
-        resp = requests.get(url, headers=HEADERS, timeout=15)
-        resp.raise_for_status()
-    except requests.RequestException as e:
-        result["error"] = str(e)
+    last_err = None
+    for attempt in range(3):
+        try:
+            resp = requests.get(url, headers=HEADERS, timeout=15)
+            resp.raise_for_status()
+            last_err = None
+            break
+        except requests.RequestException as e:
+            last_err = e
+    if last_err:
+        result["error"] = str(last_err)
         return result
 
     soup = BeautifulSoup(resp.text, "lxml")

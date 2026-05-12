@@ -225,10 +225,15 @@ class MainWindowController(NSObject):
         self._current_word = ""
         self._current_data = None
         self._reloading    = False
-        self._window       = None
-        self._right_view   = None
-        self._sidebar_view = None
-        self._sep_main     = None
+        self._window         = None
+        self._right_view     = None
+        self._sidebar_view   = None
+        self._sep_main       = None
+        self._scroll_content = None
+        self._overlay        = None
+        self._ov_icon        = None
+        self._ov_title       = None
+        self._ov_hint        = None
         self._table        = None
         self._seg          = None
         self._clear_btn    = None
@@ -399,6 +404,45 @@ class MainWindowController(NSObject):
         scroll_content.setAutoresizingMask_(2 | 16)
         right.addSubview_(scroll_content)
         update_word_view(tv, None)
+
+        # 居中浮层：用于"未找到"/"网络错误"/"空白"状态的垂直居中显示
+        overlay = NSView.alloc().initWithFrame_(NSMakeRect(0, 0, right_w, content_h))
+        overlay.setAutoresizingMask_(2 | 16)
+        overlay.setHidden_(True)
+
+        inner_h = 130
+        inner = NSView.alloc().initWithFrame_(
+            NSMakeRect(0, (content_h - inner_h) / 2, right_w, inner_h))
+        inner.setAutoresizingMask_(2 | 8 | 32)   # 宽度弹性 + 上下边距均弹性 → 垂直居中
+
+        def _clbl(text, y, h, size=13, bold=False):
+            f = NSTextField.alloc().initWithFrame_(NSMakeRect(0, y, right_w, h))
+            f.setStringValue_(text)
+            f.setBezeled_(False); f.setDrawsBackground_(False)
+            f.setEditable_(False); f.setSelectable_(False)
+            f.setAlignment_(1)   # NSTextAlignmentCenter
+            f.setAutoresizingMask_(2)
+            f.setFont_(NSFont.boldSystemFontOfSize_(size) if bold
+                       else NSFont.systemFontOfSize_(size))
+            f.setTextColor_(NSColor.secondaryLabelColor())
+            return f
+
+        ov_icon  = _clbl("", inner_h - 50, 44, size=36)
+        ov_title = _clbl("", inner_h - 86, 24, size=16, bold=True)
+        ov_hint  = _clbl("", inner_h - 116, 20, size=13)
+        ov_hint.setTextColor_(NSColor.tertiaryLabelColor())
+
+        inner.addSubview_(ov_icon)
+        inner.addSubview_(ov_title)
+        inner.addSubview_(ov_hint)
+        overlay.addSubview_(inner)
+        right.addSubview_(overlay)
+
+        self._scroll_content = scroll_content
+        self._overlay        = overlay
+        self._ov_icon        = ov_icon
+        self._ov_title       = ov_title
+        self._ov_hint        = ov_hint
 
         # ── 竖向分隔线（内容区右边缘，钉在右侧）──────────────────────────
         sep_main = NSView.alloc().initWithFrame_(
@@ -621,16 +665,40 @@ class MainWindowController(NSObject):
             self.refreshList()
 
     @objc.python_method
+    def _showOverlay(self, icon: str, title: str, hint: str):
+        self._ov_icon.setStringValue_(icon)
+        self._ov_title.setStringValue_(title)
+        self._ov_hint.setStringValue_(hint)
+        self._scroll_content.setHidden_(True)
+        self._overlay.setHidden_(False)
+
+    @objc.python_method
+    def _hideOverlay(self):
+        self._overlay.setHidden_(True)
+        self._scroll_content.setHidden_(False)
+
+    @objc.python_method
     def showContent_(self, data: dict):
         self._current_data = data
         self._current_word = data.get("word", "") if data else ""
-        update_word_view(self._content_tv, data)
+        error   = (data or {}).get("error", "")
+        entries = (data or {}).get("entries", [])
+        if error and not entries:
+            is_net = any(k in error for k in ("SSL", "retries", "timed out", "timeout"))
+            if is_net:
+                self._showOverlay("📡", "网络连接失败", "请检查网络后重试")
+            else:
+                self._showOverlay("🔍", "未找到该词条", "请检查拼写，或尝试其他词形")
+        else:
+            self._hideOverlay()
+            update_word_view(self._content_tv, data)
         if self._delegate and self._current_word:
             is_fav = self._delegate.data_manager.is_favorite(self._current_word)
             self._updateFavBtn_(is_fav)
 
     @objc.python_method
     def showLoadingForWord_(self, word: str):
+        self._hideOverlay()
         self._current_word = word
         self._current_data = None
         self._updateFavBtn_(False)

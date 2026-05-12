@@ -91,8 +91,7 @@ def build_attributed_string(data: dict) -> NSMutableAttributedString:
             _attrs(f_word, c_word, _para(line=4, after=6)))
 
     if error and not entries:
-        _append(mas, error + "\n", _attrs(f_err, c_err, _para(before=4)))
-        return mas
+        return mas   # 错误状态由 MainWindowController 的 overlay 处理
 
     # ── Pronunciations ───────────────────────────────────────────────────────
     if pronunciations:
