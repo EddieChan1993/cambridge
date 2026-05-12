@@ -120,7 +120,7 @@ def build_attributed_string(data: dict) -> NSMutableAttributedString:
         _sep_ps.setParagraphSpacingBefore_(14.0 if i == 0 else 20.0)
         _sep_ps.setParagraphSpacing_(12.0)
         _sep_ps.setLineBreakMode_(2)   # NSLineBreakByClipping
-        _sep_ps.setTailIndent_(-16.0)  # 右侧留与左侧等宽的边距
+        _sep_ps.setTailIndent_(-32.0)  # 右侧留边距（含滚动条宽度）
         _append(mas, "─" * 120 + "\n",
                 {
                     NSFontAttributeName: NSFont.boldSystemFontOfSize_(10),
