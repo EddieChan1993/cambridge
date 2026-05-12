@@ -41,10 +41,11 @@ from AppKit import (
 
 from word_display import make_word_scroll_view, update_word_view
 
-LEFT_W    = 200
-RIGHT_HDR = 50
-MIN_WIN_W = 740
-MIN_WIN_H = 480
+LEFT_W     = 200
+RIGHT_HDR  = 50
+PRON_BAR_H = 30
+MIN_WIN_W  = 740
+MIN_WIN_H  = 480
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -241,6 +242,11 @@ class MainWindowController(NSObject):
         self._search_field = None
         self._fav_btn      = None
         self._content_tv   = None
+        self._pron_bar     = None
+        self._pron_uk_btn  = None
+        self._pron_us_btn  = None
+        self._audio_uk     = ""
+        self._audio_us     = ""
         self._build()
         return self
 
@@ -397,10 +403,38 @@ class MainWindowController(NSObject):
         div.setAutoresizingMask_(2 | 8)
         right.addSubview_(div)
 
-        # Content scroll view fills remaining space
-        content_h = ch - RIGHT_HDR - 1
+        # Pronunciation bar (UK / US audio buttons) — below divider, above scroll
+        content_h  = ch - RIGHT_HDR - 1
+        scroll_y   = PRON_BAR_H
+        scroll_h   = content_h - PRON_BAR_H
+
+        pron_bar = NSView.alloc().initWithFrame_(
+            NSMakeRect(0, scroll_h, right_w, PRON_BAR_H))
+        pron_bar.setAutoresizingMask_(2 | 8)   # width sizable + pin to top
+        pron_bar.setHidden_(True)
+
+        def _pron_btn(title, x):
+            b = NSButton.alloc().initWithFrame_(NSMakeRect(x, 4, 100, 22))
+            b.setTitle_(title)
+            b.setBezelStyle_(NSBezelStyleRounded)
+            b.setButtonType_(NSButtonTypeMomentaryLight)
+            b.setFont_(NSFont.systemFontOfSize_(12))
+            b.setTarget_(self)
+            return b
+
+        pron_uk_btn = _pron_btn("🔊 UK", 8)
+        pron_uk_btn.setAction_("playAudioUK:")
+        pron_bar.addSubview_(pron_uk_btn)
+
+        pron_us_btn = _pron_btn("🔊 US", 116)
+        pron_us_btn.setAction_("playAudioUS:")
+        pron_bar.addSubview_(pron_us_btn)
+
+        right.addSubview_(pron_bar)
+
+        # Content scroll view fills space below pron_bar
         scroll_content, tv = make_word_scroll_view(
-            NSMakeRect(0, 0, right_w, content_h))
+            NSMakeRect(0, 0, right_w, scroll_h))
         scroll_content.setAutoresizingMask_(2 | 16)
         right.addSubview_(scroll_content)
         update_word_view(tv, None)
@@ -440,6 +474,9 @@ class MainWindowController(NSObject):
 
         self._scroll_content = scroll_content
         self._overlay        = overlay
+        self._pron_bar       = pron_bar
+        self._pron_uk_btn    = pron_uk_btn
+        self._pron_us_btn    = pron_us_btn
         self._ov_icon        = ov_icon
         self._ov_title       = ov_title
         self._ov_hint        = ov_hint
@@ -671,11 +708,37 @@ class MainWindowController(NSObject):
         self._ov_hint.setStringValue_(hint)
         self._scroll_content.setHidden_(True)
         self._overlay.setHidden_(False)
+        self._pron_bar.setHidden_(True)
 
     @objc.python_method
     def _hideOverlay(self):
         self._overlay.setHidden_(True)
         self._scroll_content.setHidden_(False)
+
+    @objc.python_method
+    def _updatePronBar(self, data: dict | None):
+        prons = (data or {}).get("pronunciations", [])
+        self._audio_uk = ""
+        self._audio_us = ""
+        for p in prons:
+            lbl = p.get("label", "").lower()
+            ipa = p.get("ipa", "")
+            url = p.get("audio", "")
+            if "uk" in lbl or lbl == "":
+                if not self._audio_uk:
+                    self._audio_uk = url
+                    title = f"🔊 UK  /{ipa}/"
+                    self._pron_uk_btn.setTitle_(title)
+                    self._pron_uk_btn.setEnabled_(bool(url))
+            if "us" in lbl:
+                if not self._audio_us:
+                    self._audio_us = url
+                    title = f"🔊 US  /{ipa}/"
+                    self._pron_us_btn.setTitle_(title)
+                    self._pron_us_btn.setEnabled_(bool(url))
+
+        has_any = bool(self._audio_uk or self._audio_us)
+        self._pron_bar.setHidden_(not has_any)
 
     @objc.python_method
     def showContent_(self, data: dict):
@@ -692,6 +755,7 @@ class MainWindowController(NSObject):
         else:
             self._hideOverlay()
             update_word_view(self._content_tv, data)
+            self._updatePronBar(data)
         if self._delegate and self._current_word:
             is_fav = self._delegate.data_manager.is_favorite(self._current_word)
             self._updateFavBtn_(is_fav)
@@ -699,6 +763,7 @@ class MainWindowController(NSObject):
     @objc.python_method
     def showLoadingForWord_(self, word: str):
         self._hideOverlay()
+        self._pron_bar.setHidden_(True)
         self._current_word = word
         self._current_data = None
         self._updateFavBtn_(False)
@@ -713,8 +778,42 @@ class MainWindowController(NSObject):
         )
         self._content_tv.textStorage().setAttributedString_(ph)
 
+    # ── 发音播放 ──────────────────────────────────────────────────────────────
+
+    @objc.IBAction
+    def playAudioUK_(self, sender):
+        self._playAudio_(self._audio_uk)
+
+    @objc.IBAction
+    def playAudioUS_(self, sender):
+        self._playAudio_(self._audio_us)
+
+    @objc.python_method
+    def _playAudio_(self, url: str):
+        if not url:
+            return
+        import threading, subprocess, tempfile, os, urllib.request
+        def _run():
+            try:
+                req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+                with urllib.request.urlopen(req, timeout=10) as r:
+                    data = r.read()
+                with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as f:
+                    f.write(data)
+                    tmp = f.name
+                subprocess.run(["afplay", tmp], check=False)
+                os.unlink(tmp)
+            except Exception as e:
+                print(f"[Audio] {e}")
+        threading.Thread(target=_run, daemon=True).start()
+
     @objc.python_method
     def showWindow(self):
+        if not getattr(self, "_first_shown", False):
+            self._first_shown = True
+            if (self._delegate and hasattr(self._delegate, "settings")
+                    and self._delegate.settings.sidebar_open_on_start):
+                self.toggleSidebar_(None)
         app = NSApplication.sharedApplication()
         app.activateIgnoringOtherApps_(True)
         self._window.orderFrontRegardless()

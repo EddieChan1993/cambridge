@@ -55,26 +55,49 @@ def scrape_cambridge(word: str, base_url: str = "") -> dict:
 
     # ── 音标 ──────────────────────────────────────────────────────────────────
     # 直接找所有 .ipa 元素，再向上找最近的 region 标签
+    CAMBRIDGE_ORIGIN = "https://dictionary.cambridge.org"
+
+    def _abs(src: str) -> str:
+        if not src:
+            return ""
+        if src.startswith("http"):
+            return src
+        if src.startswith("//"):
+            return "https:" + src
+        return CAMBRIDGE_ORIGIN + src
+
     seen_pron: set = set()
     for ipa_el in soup.select(".ipa"):
-        ipa = ipa_el.get_text(strip=True)   # 不加 separator，保留完整音标符号
+        ipa = ipa_el.get_text(strip=True)
         if not ipa:
             continue
 
+        # Walk up to find the dpron-i container (.uk/.us dpron-i)
         region = ""
-        parent = ipa_el.parent
-        while parent and parent.name not in ("body", None):
-            region_el = parent.find(class_=re.compile(r"\bregion\b|\bdreg\b"))
+        audio_url = ""
+        container = ipa_el.parent
+        while container and container.name not in ("body", None):
+            if "dpron-i" in (container.get("class") or []):
+                break
+            container = container.parent
+
+        if container:
+            region_el = container.find(class_=re.compile(r"\bdreg\b"))
             if region_el:
                 region = _text(region_el)
-                break
-            parent = parent.parent
+            # Prefer mpeg source inside .daud
+            daud = container.find(class_="daud")
+            if daud:
+                src_el = daud.select_one('audio source[type="audio/mpeg"]')
+                if not src_el:
+                    src_el = daud.find("source")
+                audio_url = _abs(src_el.get("src", "")) if src_el else ""
 
         key = (region.lower(), ipa)
         if key in seen_pron:
             continue
         seen_pron.add(key)
-        result["pronunciations"].append({"label": region, "ipa": ipa})
+        result["pronunciations"].append({"label": region, "ipa": ipa, "audio": audio_url})
         if len(result["pronunciations"]) >= 2:   # 最多 UK + US
             break
 

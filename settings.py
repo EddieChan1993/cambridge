@@ -55,6 +55,7 @@ DEFAULTS = {
     "show_window_keycode": 49,    # Space key
     "show_window_modifiers": ["cmd", "alt"],
     "lookup_base_url": DEFAULT_LOOKUP_URL,
+    "sidebar_open_on_start": False,
 }
 
 
@@ -128,4 +129,12 @@ class Settings:
 
     def set_lookup_base_url(self, url: str):
         self._data["lookup_base_url"] = url.strip().rstrip("/")
+        self.save()
+
+    @property
+    def sidebar_open_on_start(self) -> bool:
+        return bool(self._data.get("sidebar_open_on_start", False))
+
+    def set_sidebar_open_on_start(self, value: bool):
+        self._data["sidebar_open_on_start"] = value
         self.save()

@@ -63,7 +63,7 @@ class AppDelegate(NSObject):
         self._status_item = NSStatusBar.systemStatusBar().statusItemWithLength_(
             NSVariableStatusItemLength)
         btn = self._status_item.button()
-        btn.setTitle_("词")
+        btn.setTitle_("C")
         btn.setFont_(NSFont.boldSystemFontOfSize_(14))
         btn.setToolTip_("Cambridge 词典\n左键：显示主界面\n右键：菜单")
 
@@ -134,7 +134,14 @@ class AppDelegate(NSObject):
         event = NSApp.currentEvent()
         if event and event.type() == 1:     # NSEventTypeLeftMouseDown
             menu.cancelTracking()
+            self._status_item.button().setHighlighted_(True)
+            self.performSelector_withObject_afterDelay_(
+                "_clearStatusHighlight:", None, 0.15)
             self.main_window.showWindow()
+
+    @objc.IBAction
+    def _clearStatusHighlight_(self, sender):
+        self._status_item.button().setHighlighted_(False)
 
     @objc.IBAction
     def toggleMainWindow_(self, sender):

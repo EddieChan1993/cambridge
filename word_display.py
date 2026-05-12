@@ -65,7 +65,9 @@ def build_attributed_string(data: dict) -> NSMutableAttributedString:
     f_en       = NSFont.boldSystemFontOfSize_(14)     # definition — bold, prominent
     f_note     = NSFont.systemFontOfSize_(11)         # gram/label/usage inline note
     f_zh       = NSFont.systemFontOfSize_(13)         # Chinese definition
-    f_ex_en    = NSFont.systemFontOfSize_(13)         # example English — regular weight
+    fm         = NSFontManager.sharedFontManager()
+    f_ex_en    = fm.convertFont_toHaveTrait_(
+                     NSFont.systemFontOfSize_(13), 1)  # italic, NSItalicFontMask=1
     f_ex_zh    = NSFont.systemFontOfSize_(12)         # example Chinese — smaller
     f_err      = NSFont.systemFontOfSize_(14)
 
@@ -113,10 +115,20 @@ def build_attributed_string(data: dict) -> NSMutableAttributedString:
         pos_gram = entry.get("pos_gram", "")
         defs     = entry.get("definitions", [])
 
+        # Yellow divider — repeated ─ characters, clipped at line end
+        _sep_ps = NSMutableParagraphStyle.alloc().init()
+        _sep_ps.setParagraphSpacingBefore_(14.0 if i == 0 else 20.0)
+        _sep_ps.setParagraphSpacing_(12.0)
+        _sep_ps.setLineBreakMode_(2)   # NSLineBreakByClipping
+        _append(mas, "─" * 120 + "\n",
+                {
+                    NSFontAttributeName: NSFont.systemFontOfSize_(7),
+                    NSForegroundColorAttributeName: NSColor.systemYellowColor(),
+                    NSParagraphStyleAttributeName: _sep_ps,
+                })
+
         # POS badge + optional pos-level grammar
         if pos:
-            _append(mas, "\n", _attrs(f_pos, c_pos_fg,
-                                      _para(before=2, after=4)))
             _append(mas, f" {pos.upper()} ",
                     _attrs(f_pos, c_pos_fg,
                            _para(before=0, after=0),
@@ -126,6 +138,8 @@ def build_attributed_string(data: dict) -> NSMutableAttributedString:
                         _attrs(f_note, c_note, _para(before=0, after=0)))
             _append(mas, "\n", _attrs(f_pos, c_pos_fg, _para(after=8)))
 
+        single = len(defs) == 1
+
         for j, defn in enumerate(defs):
             en    = defn.get("en", "")
             zh    = defn.get("zh", "")
@@ -134,15 +148,18 @@ def build_attributed_string(data: dict) -> NSMutableAttributedString:
             usage = defn.get("usage", "")
             exs   = defn.get("examples", [])
 
+            # 只有一个含义时不缩进（无编号）
+            h_indent = 0 if single else INDENT
             def_para = _para(
                 line=3,
                 before=6 if j > 0 else 0,
                 after=2,
-                head=INDENT,
+                head=h_indent,
                 first=0,
             )
-            # Number
-            _append(mas, f"{j+1}. ", _attrs(f_num, c_num, def_para))
+            # 编号（多含义才显示）
+            if not single:
+                _append(mas, f"{j+1}. ", _attrs(f_num, c_num, def_para))
             # English definition (bold)
             if en:
                 _append(mas, en, _attrs(f_en, c_en, def_para))
@@ -153,16 +170,17 @@ def build_attributed_string(data: dict) -> NSMutableAttributedString:
                         _attrs(f_note, c_note, def_para))
             _append(mas, "\n", _attrs(f_en, c_en, def_para))
 
-            # Usage note on its own line (e.g. "not usually before noun")
-            if usage:
+            # Usage note — 去重：已在内联 note 里出现的跳过
+            note_lower = {p.lower() for p in note_parts}
+            if usage and usage.lower() not in note_lower:
                 usage_para = _para(line=2, after=2,
-                                   head=INDENT, first=INDENT)
+                                   head=h_indent, first=h_indent)
                 _append(mas, f"▸ {usage}\n",
                         _attrs(f_note, c_note, usage_para))
 
             # Chinese definition
             if zh:
-                zh_para = _para(line=2, after=3, head=INDENT, first=INDENT)
+                zh_para = _para(line=2, after=3, head=h_indent, first=h_indent)
                 _append(mas, zh + "\n", _attrs(f_zh, c_zh, zh_para))
 
             # Examples
@@ -171,19 +189,15 @@ def build_attributed_string(data: dict) -> NSMutableAttributedString:
                 ex_zh = ex.get("zh", "") if isinstance(ex, dict) else ""
 
                 ex_para = _para(line=2, after=1,
-                                head=INDENT + 14, first=INDENT + 2)
+                                head=h_indent + 14, first=h_indent + 2)
                 _append(mas, "• ", _attrs(f_ex_en, c_bullet, ex_para))
                 _append(mas, ex_en + "\n", _attrs(f_ex_en, c_ex_en, ex_para))
                 if ex_zh:
                     ez_para = _para(line=2, after=3,
-                                    head=INDENT + 16, first=INDENT + 16)
+                                    head=h_indent + 16, first=h_indent + 16)
                     _append(mas, ex_zh + "\n",
                             _attrs(f_ex_zh, c_ex_zh, ez_para))
 
-        if i < len(entries) - 1:
-            _append(mas, "\n",
-                    _attrs(f_en, NSColor.separatorColor(),
-                           _para(before=4, after=4)))
 
     return mas
 

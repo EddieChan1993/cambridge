@@ -23,7 +23,7 @@ from AppKit import (
 
 from settings import Settings, hotkey_display, check_conflict
 
-W, H = 440, 380
+W, H = 440, 480
 
 
 class SettingsWindowController(NSObject):
@@ -50,6 +50,7 @@ class SettingsWindowController(NSObject):
         self._show_conflict     = None
         self._show_record_btn   = None
         self._url_field         = None
+        self._sidebar_check     = None
         self._build()
         return self
 
@@ -198,6 +199,7 @@ class SettingsWindowController(NSObject):
         url_field.setEditable_(True)
         url_field.setFont_(NSFont.monospacedSystemFontOfSize_weight_(11, 0.0))
         url_field.setPlaceholderString_("https://dictionary.cambridge.org/...")
+        url_field.setDelegate_(self)
         c.addSubview_(url_field)
 
         reset_btn = NSButton.alloc().initWithFrame_(NSMakeRect(20, H-352, 80, 22))
@@ -209,6 +211,25 @@ class SettingsWindowController(NSObject):
         reset_btn.setAction_("resetURL:")
         c.addSubview_(reset_btn)
 
+        # ── Separator ────────────────────────────────────────────────────────
+        sep3 = NSTextField.alloc().initWithFrame_(NSMakeRect(20, H-370, W-40, 1))
+        sep3.setBezeled_(False); sep3.setDrawsBackground_(True)
+        sep3.setEditable_(False); sep3.setSelectable_(False)
+        sep3.setBackgroundColor_(NSColor.separatorColor())
+        c.addSubview_(sep3)
+
+        # ── Section 4: 侧边栏默认状态 ────────────────────────────────────────
+        c.addSubview_(_static("侧边栏默认状态", 20, H-390, 200, 18, bold=True))
+
+        sidebar_check = NSButton.alloc().initWithFrame_(NSMakeRect(20, H-414, W-40, 22))
+        sidebar_check.setButtonType_(3)   # NSButtonTypeSwitch
+        sidebar_check.setTitle_("启动时默认展开历史/收藏侧边栏")
+        sidebar_check.setFont_(NSFont.systemFontOfSize_(13))
+        sidebar_check.setState_(1 if self._settings.sidebar_open_on_start else 0)
+        sidebar_check.setTarget_(self)
+        sidebar_check.setAction_("toggleSidebarDefault:")
+        c.addSubview_(sidebar_check)
+
         self._window         = win
         self._hotkey_field   = hotkey_field
         self._conflict_label = conflict_label
@@ -217,6 +238,7 @@ class SettingsWindowController(NSObject):
         self._show_conflict  = show_conflict
         self._show_record_btn = show_record_btn
         self._url_field      = url_field
+        self._sidebar_check  = sidebar_check
 
     # ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -348,6 +370,18 @@ class SettingsWindowController(NSObject):
     def resetURL_(self, sender):
         from settings import DEFAULT_LOOKUP_URL
         self._url_field.setStringValue_(DEFAULT_LOOKUP_URL)
+        self._settings.set_lookup_base_url(DEFAULT_LOOKUP_URL)
+
+    @objc.IBAction
+    def toggleSidebarDefault_(self, sender):
+        self._settings.set_sidebar_open_on_start(sender.state() == 1)
+
+    def controlTextDidEndEditing_(self, notification):
+        if notification.object() != self._url_field:
+            return
+        url = self._url_field.stringValue().strip()
+        from settings import DEFAULT_LOOKUP_URL
+        self._settings.set_lookup_base_url(url if url else DEFAULT_LOOKUP_URL)
 
     @objc.IBAction
     def saveSettings_(self, sender):
@@ -362,9 +396,6 @@ class SettingsWindowController(NSObject):
         if self._delegate and hasattr(self._delegate, "applyNewShowWindowHotkey"):
             self._delegate.applyNewShowWindowHotkey(
                 self._pending_show_keycode, self._pending_show_modifiers)
-        url = self._url_field.stringValue().strip()
-        from settings import DEFAULT_LOOKUP_URL
-        self._settings.set_lookup_base_url(url if url else DEFAULT_LOOKUP_URL)
         self._window.orderOut_(None)
 
     # ── NSWindowDelegate ──────────────────────────────────────────────────────
@@ -385,5 +416,7 @@ class SettingsWindowController(NSObject):
         self._refresh_display()
         self._refresh_show_display()
         self._url_field.setStringValue_(self._settings.lookup_base_url)
+        self._sidebar_check.setState_(
+            1 if self._settings.sidebar_open_on_start else 0)
         NSApplication.sharedApplication().activateIgnoringOtherApps_(True)
         self._window.orderFrontRegardless()
