@@ -1,0 +1,10 @@
+build/
+dist/
+__pycache__/
+*.pyc
+*.pyo
+*.icns
+*.iconset/
+.cache_pip_*
+.cache_icon_*
+icon.png
