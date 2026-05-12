@@ -10,11 +10,11 @@ Built with Python 3 + PyObjC (native AppKit UI). No Electron, no web views.
 ```
 main.py               Entry point — creates NSApplication, sets activation policy
 app_delegate.py       NSApplicationDelegate — wires everything together
-main_window.py        Main NSWindow (split view: word list + word display)
-float_panel.py        Floating NSPanel for future hotkey-triggered popups
+main_window.py        Main NSWindow (sidebar + word display)
+float_panel.py        Floating NSPanel for hotkey-triggered popups
 hotkey_monitor.py     Global hotkey via CGEventTap (fallback: NSEvent monitor)
 settings.py           Settings persistence (~/.cambridge_tool/settings.json)
-settings_window.py    Hotkey settings UI with recorder + conflict detection
+settings_window.py    Preferences UI: hotkey recorder + URL + sidebar toggle
 scraper.py            Cambridge Dictionary scraper (requests + BeautifulSoup4)
 word_display.py       NSTextView rich-text renderer for dictionary entries
 data_manager.py       JSON persistence: history, favorites, cache
@@ -33,7 +33,7 @@ build.sh              Build script (supports --dev alias mode)
 
 ### NSView Coordinate System
 - macOS uses **bottom-left origin** (y=0 is bottom). Pin controls to the top by giving them a small `MinYMargin` (flexible bottom margin = autoresizing mask bit 8).
-- Autoresizing masks: `2` = width sizable, `4` = right margin flexible, `8` = bottom margin flexible (pin to top), `16` = height sizable.
+- Autoresizing masks: `1` = left margin flexible, `2` = width sizable, `4` = right margin flexible, `8` = bottom margin flexible (pin to top), `16` = height sizable, `32` = top margin flexible (pin to bottom).
 
 ### Window Showing (LSUIElement apps)
 - Use `window.orderFrontRegardless()` instead of `makeKeyAndOrderFront_` for menu-bar accessory apps — more reliable when the app is not the active process.
@@ -47,6 +47,10 @@ build.sh              Build script (supports --dev alias mode)
 ### Copy/Paste in Text Fields
 - Requires a main menu with an Edit submenu whose items target `nil` (first responder).
 - Set up in `app_delegate._buildMainMenu()`. Do not remove this.
+
+### NSMakeRect
+- `NSMakeRect` is a C inline function — **cannot be imported from Foundation**.
+- Use Python tuples `(x, y, width, height)` instead; PyObjC converts them automatically to NSRect.
 
 ## Build
 
@@ -75,18 +79,18 @@ All data lives in `~/.cambridge_tool/`:
 | `history.json` | `[{word, time}, ...]` — last 200 words |
 | `favorites.json` | `{word_lower: {word, data, time}, ...}` |
 | `cache.json` | `{word_lower: {cached_at, data}, ...}` — 7-day TTL |
-| `settings.json` | `{hotkey_keycode, hotkey_modifiers}` |
+| `settings.json` | persistent preferences (hotkey, URL, sidebar state, …) |
 | `app.pid` | PID of running instance (single-instance guard) |
 
 ## Scraper Data Format
 
-`scrape_cambridge(word)` returns:
+`scrape_cambridge(word, base_url="")` returns:
 
 ```python
 {
   "word": str,
   "url": str,
-  "pronunciations": [{"label": "uk"|"us", "ipa": str}],
+  "pronunciations": [{"label": "uk"|"us", "ipa": str, "audio": str}],  # audio = full MP3 URL
   "entries": [
     {
       "pos": str,           # "noun", "verb", etc.
@@ -107,17 +111,77 @@ All data lives in `~/.cambridge_tool/`:
 }
 ```
 
+### Audio URL extraction
+Cambridge audio `<source src="...">` uses **relative paths** like `/zhs/media/英语-汉语-繁体/uk_pron/...mp3`.
+Must prepend `https://dictionary.cambridge.org` to get a valid URL.
+The `<audio>` tag lives inside `.daud` which is a **sibling** of `.ipa`, both inside `.dpron-i`.
+Walk up from `.ipa` to find `.dpron-i`, then search inside for `.daud > audio > source[type="audio/mpeg"]`.
+
 ## Settings / Hotkey
 
-- Default hotkey: `⌘⇧C` (keycode 8, modifiers `["cmd", "shift"]`)
+- Default lookup hotkey: `⌘⇧C` (keycode 8, modifiers `["cmd", "shift"]`)
+- Default show-window hotkey: `⌘⌥Space` (keycode 49, modifiers `["cmd", "alt"]`)
 - Modifier names: `"cmd"`, `"shift"`, `"alt"`, `"ctrl"`
 - Change via right-click status bar icon → 偏好设置…
 - `settings.py` maps keycodes to display chars (`KEYCODE_NAMES`) and detects conflicts (`SYSTEM_CONFLICTS`)
+- Settings keys: `hotkey_keycode`, `hotkey_modifiers`, `show_window_keycode`, `show_window_modifiers`, `lookup_base_url`, `sidebar_open_on_start`
 
-When the hotkey fires:
+When the lookup hotkey fires:
 1. Simulates `Cmd+C` to copy selected text from the frontmost app
 2. Shows the main window (`orderFrontRegardless`)
 3. Looks up the word in the main window
+
+## Layout — main_window.py
+
+Sidebar is on the **right**; content area is on the **left**. No NSSplitView — plain NSView layout with autoresizing masks.
+
+```
+content view (full window)
+├── right (content area)  x=0, mask=2|16
+│   ├── hdr               top bar, mask=2|8
+│   ├── div               1px separator below hdr, mask=2|8
+│   ├── pron_bar          UK/US audio buttons (30px, hidden when no audio), mask=2|8
+│   ├── scroll_content    word display, mask=2|16
+│   └── overlay           centered error state, mask=2|16
+├── sep_main              1px vertical divider, mask=1|16
+└── left (sidebar)        历史/收藏, x=cw-LEFT_W, mask=1|16
+```
+
+- Sidebar defaults to **hidden** on startup; toggle via ☰ button in header right side.
+- `settings.sidebar_open_on_start` is read on **first** `showWindow()` call only (`_first_shown` flag).
+- `PRON_BAR_H = 30` — pron bar sits between divider and scroll content; hidden when word has no audio.
+
+## Word Display — word_display.py
+
+- **POS divider**: repeated `─` characters with `boldSystemFontOfSize_(10)`, yellow color, `NSLineBreakByClipping`, `tailIndent=-32` (accounts for scrollbar overlay on right).
+- **Numbering**: skipped when a POS section has only one definition (`len(defs) == 1`).
+- **Deduplication**: `usage` field not shown as `▸ line` if already present in inline `gram`/`label` notes.
+- **Example sentences**: italic via `NSFontManager.convertFont_toHaveTrait_(font, 1)` (NSItalicFontMask=1).
+- **Full-width separator pitfalls**:
+  - `NSBackgroundColorAttributeName` on `\n` does NOT render a full-width background — only covers the glyph width (zero for `\n`).
+  - `NSTextAttachment` subclass approach works in theory but is fragile in PyObjC — avoid.
+  - **Simplest reliable approach**: repeated `─` + `NSLineBreakByClipping`.
+
+## Status Bar
+
+- Icon: `"C"` (bold, size 14)
+- Left-click: intercept in `menuWillOpen_`, cancel tracking, `setHighlighted_(True)`, show window, reset highlight after 0.15s via `performSelector_withObject_afterDelay_`.
+- Right-click: standard NSMenu with 偏好设置 and 退出.
+
+## Preferences Window — settings_window.py
+
+- Section 1: 划词查询快捷键 (record button)
+- Section 2: 呼出主界面快捷键 (record button)
+- Section 3: 查询接口地址 — URL field **auto-saves on blur** (`controlTextDidEndEditing_`); 恢复默认 saves immediately.
+- Section 4: 侧边栏默认状态 — checkbox **auto-saves on toggle** (`toggleSidebarDefault_`).
+- Cancel/Save buttons only affect hotkey settings.
+
+## Known Pitfalls
+
+- **NSSplitView + window state restoration**: macOS overrides `setPosition_ofDividerAtIndex_` via saved state even with `setRestorable_(False)`. Solution: remove NSSplitView entirely and use plain NSView layout.
+- **History for non-existent words**: only call `add_history` / `set_cached` when `has_entries` is True.
+- **`NSMakeRect` import**: cannot import from Foundation — use tuples.
+- **Status bar click highlight**: `menuWillOpen_` + `cancelTracking()` removes the system highlight; must manually call `setHighlighted_(True)` and schedule reset.
 
 ## Dependencies
 
