@@ -142,7 +142,7 @@ class HotkeyMonitor(NSObject):
                     if flags & mask:
                         ns_flags |= _QUARTZ_MODS[mod]
                 print(f"[HotkeyMonitor][NS] keydown kc={kc} ns_flags={hex(ns_flags)}")
-            if mon._matches(int(kc), int(ns_flags)):
+                if mon._matches(int(kc), int(ns_flags)):
                     mon._fire()
             except Exception as exc:
                 print(f"[HotkeyMonitor] NSEvent monitor error: {exc}")
