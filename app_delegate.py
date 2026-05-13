@@ -120,6 +120,10 @@ class AppDelegate(NSObject):
     def applicationShouldTerminateAfterLastWindowClosed_(self, app):
         return False
 
+    def applicationShouldHandleReopen_hasVisibleWindows_(self, app, hasVisibleWindows):
+        self.main_window.showWindow()
+        return True
+
     def applicationWillTerminate_(self, notification):
         try:
             _PID_FILE.unlink(missing_ok=True)
