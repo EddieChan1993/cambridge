@@ -50,7 +50,7 @@ def _append(mas, text, attrs):
 
 # ── Public builder ────────────────────────────────────────────────────────────
 
-def build_attributed_string(data: dict) -> NSMutableAttributedString:
+def build_attributed_string(data: dict, font_size: int = 14) -> NSMutableAttributedString:
     mas = NSMutableAttributedString.alloc().init()
 
     word           = data.get("word", "")
@@ -58,21 +58,24 @@ def build_attributed_string(data: dict) -> NSMutableAttributedString:
     pronunciations = data.get("pronunciations", [])
     entries        = data.get("entries", [])
 
-    # ── Fonts ────────────────────────────────────────────────────────────────
-    f_word     = NSFont.boldSystemFontOfSize_(28)
-    f_pron     = NSFont.fontWithName_size_("Menlo", 13) \
-                 or NSFont.monospacedSystemFontOfSize_weight_(13, 0.0)
-    f_pron_lbl = NSFont.boldSystemFontOfSize_(10)
-    f_pos      = NSFont.boldSystemFontOfSize_(11)
-    f_num      = NSFont.boldSystemFontOfSize_(14)
-    f_en       = NSFont.boldSystemFontOfSize_(14)     # definition — bold, prominent
-    f_note     = NSFont.systemFontOfSize_(11)         # gram/label/usage inline note
-    f_zh       = NSFont.systemFontOfSize_(13)         # Chinese definition
+    # ── Fonts (scaled relative to default base of 14) ────────────────────────
+    s = font_size / 14.0
+    def _sz(n): return max(8, round(n * s))
+
+    f_word     = NSFont.boldSystemFontOfSize_(_sz(28))
+    f_pron     = NSFont.fontWithName_size_("Menlo", _sz(13)) \
+                 or NSFont.monospacedSystemFontOfSize_weight_(_sz(13), 0.0)
+    f_pron_lbl = NSFont.boldSystemFontOfSize_(_sz(10))
+    f_pos      = NSFont.boldSystemFontOfSize_(_sz(11))
+    f_num      = NSFont.boldSystemFontOfSize_(_sz(14))
+    f_en       = NSFont.boldSystemFontOfSize_(_sz(14))
+    f_note     = NSFont.systemFontOfSize_(_sz(11))
+    f_zh       = NSFont.systemFontOfSize_(_sz(13))
     fm         = NSFontManager.sharedFontManager()
     f_ex_en    = fm.convertFont_toHaveTrait_(
-                     NSFont.systemFontOfSize_(13), 1)  # italic, NSItalicFontMask=1
-    f_ex_zh    = NSFont.systemFontOfSize_(12)         # example Chinese — smaller
-    f_err      = NSFont.systemFontOfSize_(14)
+                     NSFont.systemFontOfSize_(_sz(13)), 1)  # italic
+    f_ex_zh    = NSFont.systemFontOfSize_(_sz(12))
+    f_err      = NSFont.systemFontOfSize_(_sz(14))
 
     # ── Colors ───────────────────────────────────────────────────────────────
     c_word     = NSColor.labelColor()
@@ -109,7 +112,7 @@ def build_attributed_string(data: dict) -> NSMutableAttributedString:
             para = _para(line=3)
             if audio_url:
                 spk_attrs = {
-                    NSFontAttributeName: NSFont.systemFontOfSize_(12),
+                    NSFontAttributeName: NSFont.systemFontOfSize_(_sz(12)),
                     NSForegroundColorAttributeName: c_pron_lbl,
                     NSParagraphStyleAttributeName: para,
                     NSLinkAttributeName: audio_url,
@@ -143,7 +146,7 @@ def build_attributed_string(data: dict) -> NSMutableAttributedString:
         _sep_ps.setTailIndent_(-50.0)  # 右侧留边距（含滚动条宽度）
         _append(mas, "─" * 44 + "\n",
                 {
-                    NSFontAttributeName: NSFont.boldSystemFontOfSize_(15),
+                    NSFontAttributeName: NSFont.boldSystemFontOfSize_(_sz(15)),
                     NSForegroundColorAttributeName: NSColor.systemYellowColor(),
                     NSParagraphStyleAttributeName: _sep_ps,
                 })
@@ -159,13 +162,13 @@ def build_attributed_string(data: dict) -> NSMutableAttributedString:
             _src_fg = NSColor.colorWithWhite_alpha_(0.12, 1.0)  # near-black on yellow
             # Bold word portion
             _append(mas, f" {word} ",
-                    {NSFontAttributeName: NSFont.boldSystemFontOfSize_(13),
+                    {NSFontAttributeName: NSFont.boldSystemFontOfSize_(_sz(13)),
                      NSForegroundColorAttributeName: _src_fg,
                      NSBackgroundColorAttributeName: _src_bg,
                      NSParagraphStyleAttributeName: _src_ps})
             # Separator + source name + trailing spaces to fill width
             _append(mas, f"| {source}" + " " * 120 + "\n",
-                    {NSFontAttributeName: NSFont.systemFontOfSize_(13),
+                    {NSFontAttributeName: NSFont.systemFontOfSize_(_sz(13)),
                      NSForegroundColorAttributeName: _src_fg,
                      NSBackgroundColorAttributeName: _src_bg,
                      NSParagraphStyleAttributeName: _src_ps})
@@ -306,7 +309,7 @@ def make_word_scroll_view(frame) -> tuple:
     return scroll, tv
 
 
-def update_word_view(tv, data: dict | None):
+def update_word_view(tv, data: dict | None, font_size: int = 14):
     """Render *data* into *tv*. Pass None for placeholder."""
     if data is None:
         ph = NSAttributedString.alloc().initWithString_attributes_(
@@ -320,6 +323,6 @@ def update_word_view(tv, data: dict | None):
         tv.textStorage().setAttributedString_(ph)
         return
 
-    mas = build_attributed_string(data)
+    mas = build_attributed_string(data, font_size)
     tv.textStorage().setAttributedString_(mas)
     tv.scrollRangeToVisible_((0, 0))

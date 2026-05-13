@@ -9,6 +9,7 @@ from AppKit import (
     NSBackingStoreBuffered,
     NSTextField,
     NSButton,
+    NSSlider,
     NSColor,
     NSFont,
     NSBezelStyleRounded,
@@ -23,7 +24,7 @@ from AppKit import (
 
 from settings import Settings, hotkey_display, check_conflict
 
-W, H = 440, 480
+W, H = 440, 560
 
 
 class SettingsWindowController(NSObject):
@@ -51,6 +52,8 @@ class SettingsWindowController(NSObject):
         self._show_record_btn   = None
         self._url_field         = None
         self._sidebar_check     = None
+        self._font_slider       = None
+        self._font_size_label   = None
         self._build()
         return self
 
@@ -230,6 +233,45 @@ class SettingsWindowController(NSObject):
         sidebar_check.setAction_("toggleSidebarDefault:")
         c.addSubview_(sidebar_check)
 
+        # ── Separator ────────────────────────────────────────────────────────
+        sep4 = NSTextField.alloc().initWithFrame_(NSMakeRect(20, H-430, W-40, 1))
+        sep4.setBezeled_(False); sep4.setDrawsBackground_(True)
+        sep4.setEditable_(False); sep4.setSelectable_(False)
+        sep4.setBackgroundColor_(NSColor.separatorColor())
+        c.addSubview_(sep4)
+
+        # ── Section 5: 内容字体大小 ──────────────────────────────────────────
+        c.addSubview_(_static("内容字体大小", 20, H-452, 200, 18, bold=True))
+        c.addSubview_(_static("拖动滑块调整，实时预览效果。",
+                              20, H-472, W-40, 16, size=11,
+                              color=NSColor.secondaryLabelColor()))
+
+        cur_size = self._settings.font_size
+        font_size_label = NSTextField.alloc().initWithFrame_(
+            NSMakeRect(W-54, H-508, 44, 20))
+        font_size_label.setStringValue_(f"{cur_size} pt")
+        font_size_label.setBezeled_(False); font_size_label.setDrawsBackground_(False)
+        font_size_label.setEditable_(False); font_size_label.setSelectable_(False)
+        font_size_label.setAlignment_(1)    # right-align
+        font_size_label.setFont_(NSFont.monospacedSystemFontOfSize_weight_(12, 0.0))
+        font_size_label.setTextColor_(NSColor.secondaryLabelColor())
+        c.addSubview_(font_size_label)
+
+        c.addSubview_(_static("A", 20, H-511, 16, 18, size=10))
+        c.addSubview_(_static("A", W-74, H-513, 20, 22, bold=True, size=16))
+
+        font_slider = NSSlider.alloc().initWithFrame_(
+            NSMakeRect(36, H-510, W-116, 20))
+        font_slider.setMinValue_(10)
+        font_slider.setMaxValue_(22)
+        font_slider.setIntValue_(cur_size)
+        font_slider.setNumberOfTickMarks_(13)
+        font_slider.setAllowsTickMarkValuesOnly_(True)
+        font_slider.setContinuous_(True)
+        font_slider.setTarget_(self)
+        font_slider.setAction_("fontSizeChanged:")
+        c.addSubview_(font_slider)
+
         self._window         = win
         self._hotkey_field   = hotkey_field
         self._conflict_label = conflict_label
@@ -239,6 +281,8 @@ class SettingsWindowController(NSObject):
         self._show_record_btn = show_record_btn
         self._url_field      = url_field
         self._sidebar_check  = sidebar_check
+        self._font_slider    = font_slider
+        self._font_size_label = font_size_label
 
     # ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -376,6 +420,13 @@ class SettingsWindowController(NSObject):
     def toggleSidebarDefault_(self, sender):
         self._settings.set_sidebar_open_on_start(sender.state() == 1)
 
+    @objc.IBAction
+    def fontSizeChanged_(self, sender):
+        size = int(sender.intValue())
+        self._font_size_label.setStringValue_(f"{size} pt")
+        if self._delegate and hasattr(self._delegate, "applyFontSize"):
+            self._delegate.applyFontSize(size)
+
     def controlTextDidEndEditing_(self, notification):
         if notification.object() != self._url_field:
             return
@@ -418,5 +469,8 @@ class SettingsWindowController(NSObject):
         self._url_field.setStringValue_(self._settings.lookup_base_url)
         self._sidebar_check.setState_(
             1 if self._settings.sidebar_open_on_start else 0)
+        cur = self._settings.font_size
+        self._font_slider.setIntValue_(cur)
+        self._font_size_label.setStringValue_(f"{cur} pt")
         NSApplication.sharedApplication().activateIgnoringOtherApps_(True)
         self._window.orderFrontRegardless()

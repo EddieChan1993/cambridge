@@ -747,10 +747,16 @@ class MainWindowController(NSObject):
                 self._showOverlay("🔍", "未找到该词条", "请检查拼写，或尝试其他词形")
         else:
             self._hideOverlay()
-            update_word_view(self._content_tv, data)
+            fs = self._delegate.settings.font_size if self._delegate else 14
+            update_word_view(self._content_tv, data, fs)
         if self._delegate and self._current_word:
             is_fav = self._delegate.data_manager.is_favorite(self._current_word)
             self._updateFavBtn_(is_fav)
+
+    @objc.python_method
+    def rerenderFontSize(self, font_size: int):
+        if self._current_data:
+            update_word_view(self._content_tv, self._current_data, font_size)
 
     @objc.python_method
     def showLoadingForWord_(self, word: str):

@@ -56,6 +56,7 @@ DEFAULTS = {
     "show_window_modifiers": ["cmd", "alt"],
     "lookup_base_url": DEFAULT_LOOKUP_URL,
     "sidebar_open_on_start": False,
+    "font_size": 14,
 }
 
 
@@ -137,4 +138,12 @@ class Settings:
 
     def set_sidebar_open_on_start(self, value: bool):
         self._data["sidebar_open_on_start"] = value
+        self.save()
+
+    @property
+    def font_size(self) -> int:
+        return int(self._data.get("font_size", DEFAULTS["font_size"]))
+
+    def set_font_size(self, size: int):
+        self._data["font_size"] = int(size)
         self.save()

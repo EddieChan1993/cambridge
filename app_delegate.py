@@ -168,6 +168,11 @@ class AppDelegate(NSObject):
         self._hotkey = HotkeyMonitor(self, keycode, modifiers)
 
     @objc.python_method
+    def applyFontSize(self, size: int):
+        self.settings.set_font_size(size)
+        self.main_window.rerenderFontSize(size)
+
+    @objc.python_method
     def applyNewShowWindowHotkey(self, keycode: int, modifiers: list):
         if self._show_hotkey:
             self._show_hotkey.stop()
