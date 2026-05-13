@@ -127,12 +127,22 @@ fi
 
 # ── 4. Build ──────────────────────────────────────────────────────────────
 if $DEV_MODE; then
-    _step "Building (dev / alias mode)…"
+    _step "Building (dev / alias mode)… "
     rm -rf dist
-    if "$PYTHON" setup.py py2app --alias >>"$BUILD_LOG" 2>&1; then
-        _done
+    "$PYTHON" setup.py py2app --alias >>"$BUILD_LOG" 2>&1 &
+    BUILD_PID=$!
+    _START=$(date +%s)
+    while kill -0 "$BUILD_PID" 2>/dev/null; do
+        _ELAPSED=$(( $(date +%s) - _START ))
+        printf "\r  \033[34m→\033[0m  Building (dev / alias mode)…  \033[90m%ds\033[0m " "$_ELAPSED"
+        sleep 1
+    done
+    wait "$BUILD_PID" && _BUILD_OK=true || _BUILD_OK=false
+    _ELAPSED=$(( $(date +%s) - _START ))
+    if $_BUILD_OK; then
+        printf "\r  \033[32m✓\033[0m  Building (dev / alias mode)…  \033[32mdone\033[0m (%ds)\n" "$_ELAPSED"
     else
-        _fail
+        printf "\r  \033[31m✗\033[0m  Building (dev / alias mode)…  \033[31mfailed\033[0m (%ds)\n" "$_ELAPSED"
         echo ""; echo "── build log ──"
         grep -iE "(error|warning|exception|traceback)" "$BUILD_LOG" \
             | grep -v "DeprecatedInstaller\|fetch_build_eggs\|setuptools" || cat "$BUILD_LOG"
@@ -146,11 +156,21 @@ else
     rm -rf build dist
     _done
 
-    _step "Building (full / distributable)…"
-    if "$PYTHON" setup.py py2app >>"$BUILD_LOG" 2>&1; then
-        _done
+    _step "Building (full / distributable)… "
+    "$PYTHON" setup.py py2app >>"$BUILD_LOG" 2>&1 &
+    BUILD_PID=$!
+    _START=$(date +%s)
+    while kill -0 "$BUILD_PID" 2>/dev/null; do
+        _ELAPSED=$(( $(date +%s) - _START ))
+        printf "\r  \033[34m→\033[0m  Building (full / distributable)…  \033[90m%ds\033[0m " "$_ELAPSED"
+        sleep 1
+    done
+    wait "$BUILD_PID" && _BUILD_OK=true || _BUILD_OK=false
+    _ELAPSED=$(( $(date +%s) - _START ))
+    if $_BUILD_OK; then
+        printf "\r  \033[32m✓\033[0m  Building (full / distributable)…  \033[32mdone\033[0m (%ds)\n" "$_ELAPSED"
     else
-        _fail
+        printf "\r  \033[31m✗\033[0m  Building (full / distributable)…  \033[31mfailed\033[0m (%ds)\n" "$_ELAPSED"
         echo ""; echo "── build log ──"
         grep -iE "(error|warning|exception|traceback)" "$BUILD_LOG" \
             | grep -v "DeprecatedInstaller\|fetch_build_eggs\|setuptools" || cat "$BUILD_LOG"
