@@ -193,7 +193,7 @@ Pronunciation is rendered inline inside the word display NSTextView, not as sepa
 - **History for non-existent words**: only call `add_history` / `set_cached` when `has_entries` is True.
 - **`NSMakeRect` import**: cannot import from Foundation — use tuples.
 - **Status bar click highlight**: `menuWillOpen_` + `cancelTracking()` removes the system highlight; must manually call `setHighlighted_(True)` and schedule reset.
-- **NSTextAlignmentCenter value differs by macOS version**: on newer macOS (15+), `NSTextAlignmentCenter = 1` (not 2). Using `setAlignment_(2)` produces right-alignment. Always use `setAlignment_(1)` for center alignment in this project.
+- **NSTextAlignmentCenter value differs by macOS version**: old AppKit used `NSCenterTextAlignment = 2`; newer macOS unified with UIKit so `NSTextAlignmentCenter = 1`, `NSTextAlignmentRight = 2`. **Never hardcode alignment integers** — always import and use the named constants: `from AppKit import NSTextAlignmentLeft, NSTextAlignmentCenter, NSTextAlignmentRight`.
 - **Link tooltip suppression**: overriding `setToolTip_` on NSTextView subclass has no effect on link tooltips — NSTextView uses a private `NSToolTipWindow` mechanism. Override `addToolTipRect_owner_userData_` instead (return 0 to block all tooltip rects).
 
 ## Global Hotkey — Lessons Learned (hard-won)
