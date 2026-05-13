@@ -60,8 +60,12 @@ class HotkeyMonitor(NSObject):
 
     @objc.python_method
     def _start(self):
-        if not self._try_event_tap():
+        print(f"[HotkeyMonitor] starting — keycode={self._keycode} mods={self._modifiers}")
+        ok = self._try_event_tap()
+        print(f"[HotkeyMonitor] CGEventTap created: {ok}")
+        if not ok:
             self._try_ns_monitor()
+            print("[HotkeyMonitor] fell back to NSEvent global monitor")
 
     @objc.python_method
     def _matches(self, keycode: int, flags: int) -> bool:
@@ -92,7 +96,8 @@ class HotkeyMonitor(NSObject):
                     kc    = Quartz.CGEventGetIntegerValueField(
                         event, Quartz.kCGKeyboardEventKeycode)
                     flags = Quartz.CGEventGetFlags(event)
-                    if mon._matches(int(kc), int(flags)):
+                    print(f"[HotkeyMonitor] keydown kc={kc} flags={hex(int(flags))} want_kc={mon._keycode} want_mods={mon._modifiers}")
+                if mon._matches(int(kc), int(flags)):
                         mon._fire()
                         return None     # consume
             except Exception as exc:
@@ -136,13 +141,16 @@ class HotkeyMonitor(NSObject):
                 for mod, mask in _NS_MODS.items():
                     if flags & mask:
                         ns_flags |= _QUARTZ_MODS[mod]
-                if mon._matches(int(kc), int(ns_flags)):
+                print(f"[HotkeyMonitor][NS] keydown kc={kc} ns_flags={hex(ns_flags)}")
+            if mon._matches(int(kc), int(ns_flags)):
                     mon._fire()
             except Exception as exc:
                 print(f"[HotkeyMonitor] NSEvent monitor error: {exc}")
 
+        self._ns_handler = _handler   # keep Python ref
         self._monitor = NSEvent.addGlobalMonitorForEventsMatchingMask_handler_(
             NSEventMaskKeyDown, _handler)
+        print(f"[HotkeyMonitor] NSEvent monitor registered: {self._monitor is not None}")
         self._running = True
 
     @objc.python_method
