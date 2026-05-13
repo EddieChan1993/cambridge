@@ -9,13 +9,13 @@ import os
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from AppKit import NSApplication, NSApplicationActivationPolicyRegular
+from AppKit import NSApplication, NSApplicationActivationPolicyAccessory
 from app_delegate import AppDelegate
 
 
 def main():
     app = NSApplication.sharedApplication()
-    app.setActivationPolicy_(NSApplicationActivationPolicyRegular)
+    app.setActivationPolicy_(NSApplicationActivationPolicyAccessory)
 
     delegate = AppDelegate.alloc().init()
     app.setDelegate_(delegate)

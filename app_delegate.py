@@ -139,9 +139,6 @@ class AppDelegate(NSObject):
                 "_clearStatusHighlight:", None, 0.15)
             self._settings_win.showWindow()
 
-    def applicationShouldHandleReopen_hasVisibleWindows_(self, app, flag):
-        self.main_window.showWindow()
-        return True
 
     @objc.IBAction
     def _clearStatusHighlight_(self, sender):
