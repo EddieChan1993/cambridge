@@ -159,10 +159,10 @@ class AppDelegate(NSObject):
 
     @objc.python_method
     def hotkeyTriggered(self):
-        self.main_window.showWindow()
-        word = self._getSelectedText()
+        word = self._getSelectedText()   # must run before we steal focus
         if word:
             word = word.strip()
+        self.main_window.showWindow()
         if word:
             self.lookupWordInMainWindow_(word)
 
