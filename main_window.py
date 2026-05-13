@@ -442,11 +442,13 @@ class MainWindowController(NSObject):
         overlay.addSubview_(inner)
         right.addSubview_(overlay)
 
-        self._scroll_content = scroll_content
-        self._overlay        = overlay
-        self._ov_icon        = ov_icon
-        self._ov_title       = ov_title
-        self._ov_hint        = ov_hint
+        self._scroll_content  = scroll_content
+        self._overlay         = overlay
+        self._overlay_inner   = inner
+        self._overlay_inner_h = inner_h
+        self._ov_icon         = ov_icon
+        self._ov_title        = ov_title
+        self._ov_hint         = ov_hint
 
         # ── 竖向分隔线（内容区右边缘，钉在右侧）──────────────────────────
         sep_main = NSView.alloc().initWithFrame_(
@@ -673,6 +675,15 @@ class MainWindowController(NSObject):
         self._ov_icon.setStringValue_(icon)
         self._ov_title.setStringValue_(title)
         self._ov_hint.setStringValue_(hint)
+        # 每次显示时根据当前 overlay 实际尺寸重新居中 inner
+        ov = self._overlay.bounds()
+        ih = self._overlay_inner_h
+        iw = ov.size.width
+        self._overlay_inner.setFrame_(
+            NSMakeRect(0, (ov.size.height - ih) / 2, iw, ih))
+        for lbl in (self._ov_icon, self._ov_title, self._ov_hint):
+            f = lbl.frame()
+            lbl.setFrame_(NSMakeRect(0, f.origin.y, iw, f.size.height))
         self._scroll_content.setHidden_(True)
         self._overlay.setHidden_(False)
 
