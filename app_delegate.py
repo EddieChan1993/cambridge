@@ -69,7 +69,6 @@ class AppDelegate(NSObject):
 
         # ── 右键菜单 ────────────────────────────────────────────────────────
         menu = NSMenu.alloc().init()
-        menu.setDelegate_(self)     # menuWillOpen_ intercepts left-click
 
         item_prefs = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
             "偏好设置…", "openSettings:", "")
@@ -126,23 +125,6 @@ class AppDelegate(NSObject):
             _PID_FILE.unlink(missing_ok=True)
         except Exception:
             pass
-
-    # ── NSMenuDelegate — 拦截左键，让右键正常弹菜单 ───────────────────────────
-
-    def menuWillOpen_(self, menu):
-        from AppKit import NSApp
-        event = NSApp.currentEvent()
-        if event and event.type() == 1:     # NSEventTypeLeftMouseDown
-            menu.cancelTracking()
-            self._status_item.button().setHighlighted_(True)
-            self.performSelector_withObject_afterDelay_(
-                "_clearStatusHighlight:", None, 0.15)
-            self._settings_win.showWindow()
-
-
-    @objc.IBAction
-    def _clearStatusHighlight_(self, sender):
-        self._status_item.button().setHighlighted_(False)
 
     @objc.IBAction
     def toggleMainWindow_(self, sender):
