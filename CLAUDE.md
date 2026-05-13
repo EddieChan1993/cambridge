@@ -67,8 +67,10 @@ bash build.sh
 2. Clears the word cache (`~/.cambridge_tool/cache.json`)
 3. Detects Python 3.9+ (skips Anaconda/miniforge)
 4. Skips `pip install` if `requirements.txt` hasn't changed (MD5 hash flag)
-5. Converts `icon.png` → `icon.icns` if changed
-6. Builds with py2app, filters signature noise from output
+5. If `icon.png` is absent, renders it from `logo.svg` via `qlmanage` (`icon.png` is gitignored — `logo.svg` is the source of truth)
+6. Converts `icon.png` → `icon.icns` if changed (MD5 cache flag)
+7. Builds with py2app, filters signature noise from output
+8. **Full build only**: runs `tccutil reset Accessibility/ListenEvent` and prints permission reminder
 
 ## Data Storage
 
@@ -140,8 +142,7 @@ content view (full window)
 ├── right (content area)  x=0, mask=2|16
 │   ├── hdr               top bar, mask=2|8
 │   ├── div               1px separator below hdr, mask=2|8
-│   ├── pron_bar          UK/US audio buttons (30px, hidden when no audio), mask=2|8
-│   ├── scroll_content    word display, mask=2|16
+│   ├── scroll_content    word display (fills full content_h), mask=2|16
 │   └── overlay           centered error state, mask=2|16
 ├── sep_main              1px vertical divider, mask=1|16
 └── left (sidebar)        历史/收藏, x=cw-LEFT_W, mask=1|16
@@ -149,11 +150,11 @@ content view (full window)
 
 - Sidebar defaults to **hidden** on startup; toggle via ☰ button in header right side.
 - `settings.sidebar_open_on_start` is read on **first** `showWindow()` call only (`_first_shown` flag).
-- `PRON_BAR_H = 30` — pron bar sits between divider and scroll content; hidden when word has no audio.
+- **pron_bar removed** — UK/US audio buttons were removed. Pronunciation is now rendered inline inside the NSTextView (see Word Display below).
 
 ## Word Display — word_display.py
 
-- **POS divider**: repeated `─` characters with `boldSystemFontOfSize_(10)`, yellow color, `NSLineBreakByClipping`, `tailIndent=-32` (accounts for scrollbar overlay on right).
+- **POS divider**: repeated `─` characters with `boldSystemFontOfSize_(15)`, yellow color, `NSLineBreakByClipping`, `tailIndent=-50` (accounts for scrollbar overlay on right).
 - **Numbering**: skipped when a POS section has only one definition (`len(defs) == 1`).
 - **Deduplication**: `usage` field not shown as `▸ line` if already present in inline `gram`/`label` notes.
 - **Example sentences**: italic via `NSFontManager.convertFont_toHaveTrait_(font, 1)` (NSItalicFontMask=1).
@@ -161,6 +162,16 @@ content view (full window)
   - `NSBackgroundColorAttributeName` on `\n` does NOT render a full-width background — only covers the glyph width (zero for `\n`).
   - `NSTextAttachment` subclass approach works in theory but is fragile in PyObjC — avoid.
   - **Simplest reliable approach**: repeated `─` + `NSLineBreakByClipping`.
+
+### Pronunciation (inline in NSTextView)
+
+Pronunciation is rendered inline inside the word display NSTextView, not as separate buttons.
+
+- `🔊 label /ipa/` text is appended with `NSLinkAttributeName: audio_url` so clicking triggers `textView_clickedOnLink_atIndex_` delegate.
+- **No blue underline**: `tv.setLinkTextAttributes_({NSForegroundColorAttributeName: NSColor.secondaryLabelColor()})` overrides the default blue link style.
+- **No URL tooltip**: `_WordTextView` subclass overrides `addToolTipRect_owner_userData_` to return 0, blocking NSTextView's private tooltip registration mechanism. (`setToolTip_` override does NOT work for link tooltips — wrong level.)
+- **Pointing hand cursor**: `_WordTextView` uses a custom `NSTrackingArea` (`NSTrackingMouseMoved=0x02 | NSTrackingActiveAlways=0x80`) + `mouseMoved_` override that checks `NSLinkAttributeName` at the character index under the pointer.
+- **Audio playback**: handled in `textView_clickedOnLink_atIndex_` in both `main_window.py` and `float_panel.py`. Fetches the MP3 URL via `requests` and plays with `NSSound`.
 
 ## Status Bar
 
@@ -182,6 +193,8 @@ content view (full window)
 - **History for non-existent words**: only call `add_history` / `set_cached` when `has_entries` is True.
 - **`NSMakeRect` import**: cannot import from Foundation — use tuples.
 - **Status bar click highlight**: `menuWillOpen_` + `cancelTracking()` removes the system highlight; must manually call `setHighlighted_(True)` and schedule reset.
+- **NSTextAlignmentCenter value differs by macOS version**: on newer macOS (15+), `NSTextAlignmentCenter = 1` (not 2). Using `setAlignment_(2)` produces right-alignment. Always use `setAlignment_(1)` for center alignment in this project.
+- **Link tooltip suppression**: overriding `setToolTip_` on NSTextView subclass has no effect on link tooltips — NSTextView uses a private `NSToolTipWindow` mechanism. Override `addToolTipRect_owner_userData_` instead (return 0 to block all tooltip rects).
 
 ## Global Hotkey — Lessons Learned (hard-won)
 
@@ -189,17 +202,25 @@ content view (full window)
 
 Both `CGEventTapCreate` and `NSEvent.addGlobalMonitorForEventsMatchingMask_handler_`
 require macOS TCC permissions (Accessibility and Input Monitoring respectively).
-**Each `--dev` rebuild changes the executable's code signature**, which silently
+**Each rebuild (dev or full) changes the executable's code signature**, which silently
 invalidates the previously granted permission. Symptom: tap returns `None`, monitor
 registers successfully but handler is never called — no error, no crash.
 
-**Fix after any rebuild that changes the binary:**
+**Both permissions are mandatory** — Accessibility alone is not sufficient on newer macOS.
+CGEventTap requires Accessibility; NSEvent global monitor (fallback) requires Input Monitoring.
+Input Monitoring does **not** auto-prompt; user must enable it manually.
+
+**Fix after any rebuild:**
 ```bash
 tccutil reset Accessibility com.local.hotdict
 tccutil reset ListenEvent com.local.hotdict
 ```
-Then relaunch the app — it will re-prompt for Accessibility; grant it, then manually
-enable Input Monitoring in System Settings → Privacy & Security → Input Monitoring.
+Then relaunch — it will re-prompt for Accessibility (grant it), then manually enable
+Input Monitoring in System Settings → Privacy & Security → Input Monitoring.
+
+**`build.sh` (full/non-dev mode) runs this reset automatically** after each build and
+prints a reminder. Dev mode does not auto-reset (permissions usually survive dev rebuilds
+in practice, since the binary changes less).
 
 ### HotkeyMonitor must be a plain Python class, not NSObject
 
