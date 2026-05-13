@@ -14,7 +14,7 @@ done
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR"
 
-BUILD_LOG=$(mktemp /tmp/hotdict_build_XXXXXX.log)
+BUILD_LOG=$(mktemp /tmp/hotdict_build_XXXXXX.log 2>/dev/null || mktemp)
 trap 'rm -f "$BUILD_LOG"' EXIT
 
 # ── 打印工具 ────────────────────────────────────────────────────────────────

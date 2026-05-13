@@ -383,7 +383,7 @@ class MainWindowController(NSObject):
 
         sidebar_btn = _HoverFavButton.alloc().initWithFrame_(NSMakeRect(right_w - 44, 15, 36, 36))
         sidebar_btn.setTitle_("☰")
-        sidebar_btn.setFont_(NSFont.systemFontOfSize_(18))
+        sidebar_btn.setFont_(NSFont.systemFontOfSize_(14))
         sidebar_btn.setContentTintColor_(NSColor.secondaryLabelColor())
         sidebar_btn.setToolTip_("显示/隐藏侧边栏")
         sidebar_btn.setTarget_(self)
