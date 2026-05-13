@@ -722,6 +722,7 @@ class MainWindowController(NSObject):
     @objc.python_method
     def showLoadingForWord_(self, word: str):
         self._hideOverlay()
+        self._search_field.setStringValue_(word)
         self._current_word = word
         self._current_data = None
         self._updateFavBtn_(False)
