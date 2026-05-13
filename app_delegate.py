@@ -65,7 +65,7 @@ class AppDelegate(NSObject):
         btn = self._status_item.button()
         btn.setTitle_("C")
         btn.setFont_(NSFont.boldSystemFontOfSize_(14))
-        btn.setToolTip_("Cambridge 词典\n左键：显示主界面\n右键：菜单")
+        btn.setToolTip_("HotDict\n左键：显示主界面\n右键：菜单")
 
         # ── 右键菜单 ────────────────────────────────────────────────────────
         menu = NSMenu.alloc().init()

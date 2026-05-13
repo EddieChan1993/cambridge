@@ -14,9 +14,9 @@ OPTIONS = {
     "argv_emulation": False,
     **( {"iconfile": _icon} if _icon else {} ),
     "plist": {
-        "CFBundleName": "Cambridge",
-        "CFBundleDisplayName": "Cambridge",
-        "CFBundleIdentifier": "com.local.cambridge-lookup",
+        "CFBundleName": "HotDict",
+        "CFBundleDisplayName": "HotDict",
+        "CFBundleIdentifier": "com.local.hotdict",
         "CFBundleVersion": "1.0.0",
         "CFBundleShortVersionString": "1.0",
         "NSHumanReadableCopyright": "",
@@ -55,7 +55,7 @@ OPTIONS = {
 
 setup(
     app=APP,
-    name="Cambridge",
+    name="HotDict",
     options={"py2app": OPTIONS},
     setup_requires=["py2app"],
 )

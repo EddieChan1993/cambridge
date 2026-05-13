@@ -123,7 +123,7 @@ class FloatPanel(NSObject):
             NSBackingStoreBuffered,
             False,
         )
-        panel.setTitle_("Cambridge 查词")
+        panel.setTitle_("HotDict")
         panel.setFloatingPanel_(True)
         panel.setHidesOnDeactivate_(False)
         panel.setBecomesKeyOnlyIfNeeded_(True)

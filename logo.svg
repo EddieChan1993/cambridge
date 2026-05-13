@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+
+  <!-- Background -->
+  <rect width="512" height="512" rx="115" fill="#00B894"/>
+
+  <!-- ── Top bun ── -->
+  <rect x="108" y="138" width="296" height="84" rx="42" fill="#F5A623"/>
+  <!-- Bun gloss -->
+  <ellipse cx="204" cy="158" rx="78" ry="20" fill="#FDCB6E" opacity="0.5"/>
+  <!-- Sesame seeds -->
+  <ellipse cx="178" cy="174" rx="11" ry="5.5" fill="#C8820A" transform="rotate(-28 178 174)"/>
+  <ellipse cx="237" cy="161" rx="11" ry="5.5" fill="#C8820A" transform="rotate(8 237 161)"/>
+  <ellipse cx="298" cy="168" rx="11" ry="5.5" fill="#C8820A" transform="rotate(-18 298 168)"/>
+  <ellipse cx="350" cy="178" rx="11" ry="5.5" fill="#C8820A" transform="rotate(22 350 178)"/>
+
+  <!-- ── Sausage ── -->
+  <rect x="72" y="199" width="368" height="80" rx="40" fill="#C0392B"/>
+  <ellipse cx="256" cy="216" rx="152" ry="15" fill="#E74C3C" opacity="0.5"/>
+
+  <!-- ── Mustard squiggle ── -->
+  <path d="M96,238 C112,222 128,254 144,238 C160,222 176,254 192,238
+           C208,222 224,254 240,238 C256,222 272,254 288,238
+           C304,222 320,254 336,238 C352,222 368,254 384,242"
+        stroke="#F9CA24" stroke-width="10" fill="none"
+        stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- ── Bottom bun ── -->
+  <rect x="108" y="258" width="296" height="84" rx="42" fill="#D48C10"/>
+
+  <!-- ── Magnifying glass ── -->
+  <circle cx="352" cy="360" r="66" fill="white" opacity="0.12"/>
+  <circle cx="352" cy="360" r="66" fill="none" stroke="white" stroke-width="24"/>
+  <line x1="401" y1="409" x2="445" y2="453"
+        stroke="white" stroke-width="24" stroke-linecap="round"/>
+  <text x="352" y="385"
+        font-family="Georgia, 'Times New Roman', serif"
+        font-size="62" font-weight="bold"
+        fill="white" text-anchor="middle" opacity="0.92">A</text>
+
+</svg>

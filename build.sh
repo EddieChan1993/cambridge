@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build Cambridge.app
+# Build HotDict.app
 #
 # 用法：
 #   bash build.sh          完整打包（可分发的 .app，含所有依赖）
@@ -14,7 +14,7 @@ done
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR"
 
-BUILD_LOG=$(mktemp /tmp/cambridge_build_XXXXXX.log)
+BUILD_LOG=$(mktemp /tmp/hotdict_build_XXXXXX.log)
 trap 'rm -f "$BUILD_LOG"' EXIT
 
 # ── 打印工具 ────────────────────────────────────────────────────────────────
@@ -25,7 +25,7 @@ _skip() { printf " \033[90mskipped\033[0m\n"; }
 _fail() { printf " \033[31mfailed\033[0m\n"; }
 
 echo ""
-echo "  Cambridge Builder"
+echo "  HotDict Builder"
 echo "  ──────────────────────────────────────────"
 
 # ── 0. 关闭旧实例 ──────────────────────────────────────────────────────────
@@ -39,7 +39,7 @@ if [ -f "$PID_FILE" ]; then
     fi
     rm -f "$PID_FILE"
 fi
-pkill -x "Cambridge" 2>/dev/null || true
+pkill -x "HotDict" 2>/dev/null || true
 
 # 清除词条缓存
 CACHE_FILE="$HOME/.cambridge_tool/cache.json"
@@ -150,7 +150,7 @@ if $DEV_MODE; then
     fi
 
     echo "  ──────────────────────────────────────────"
-    printf "  \033[32m✅  dist/Cambridge.app\033[0m  (dev build · local only)\n\n"
+    printf "  \033[32m✅  dist/HotDict.app\033[0m  (dev build · local only)\n\n"
 else
     _step "Cleaning previous build…"
     rm -rf build dist
@@ -178,5 +178,5 @@ else
     fi
 
     echo "  ──────────────────────────────────────────"
-    printf "  \033[32m✅  dist/Cambridge.app\033[0m  (drag to /Applications to install)\n\n"
+    printf "  \033[32m✅  dist/HotDict.app\033[0m  (drag to /Applications to install)\n\n"
 fi

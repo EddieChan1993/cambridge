@@ -39,7 +39,7 @@ from AppKit import (
 from word_display import make_word_scroll_view, update_word_view
 
 LEFT_W     = 200
-RIGHT_HDR  = 50
+RIGHT_HDR  = 66
 MIN_WIN_W  = 740
 MIN_WIN_H  = 480
 
@@ -202,7 +202,7 @@ def _btn(title, target, action, frame):
     b.setTitle_(title)
     b.setBezelStyle_(NSBezelStyleRounded)
     b.setButtonType_(NSButtonTypeMomentaryLight)
-    b.setFont_(NSFont.systemFontOfSize_(12))
+    b.setFont_(NSFont.systemFontOfSize_(14))
     b.setTarget_(target)
     b.setAction_(action)
     return b
@@ -255,7 +255,7 @@ class MainWindowController(NSObject):
                  | NSWindowStyleMaskMiniaturizable | NSWindowStyleMaskResizable)
         win = NSWindow.alloc().initWithContentRect_styleMask_backing_defer_(
             NSMakeRect(x, y, cw, ch), style, NSBackingStoreBuffered, False)
-        win.setTitle_("Cambridge")
+        win.setTitle_("HotDict")
         win.setMinSize_(NSMakeSize(MIN_WIN_W, MIN_WIN_H))
         win.setReleasedWhenClosed_(False)
         win.setRestorable_(False)
@@ -347,11 +347,11 @@ class MainWindowController(NSObject):
         hdr.setAutoresizingMask_(2 | 8)
 
         # 布局：[搜索框(弹性)] [查询] [★] [☰]，右侧三个按钮钉在右边
-        # 右侧固定宽度：52(查询)+8+32(★)+8+32(☰)+8 = 140
-        fld_w = right_w - 8 - 8 - 52 - 8 - 32 - 8 - 32 - 8   # = right_w - 156
+        # 右侧固定宽度：60(查询)+8+36(★)+8+36(☰)+8 = 156
+        fld_w = right_w - 8 - 8 - 60 - 8 - 36 - 8 - 36 - 8   # = right_w - 172
 
         search_field = NSTextField.alloc().initWithFrame_(
-            NSMakeRect(8, 11, fld_w, 28))
+            NSMakeRect(8, 15, fld_w, 36))
         search_field.setPlaceholderString_("输入单词… 回车或点击查询")
         search_field.setBezeled_(True)
         search_field.setBezelStyle_(1)
@@ -359,25 +359,26 @@ class MainWindowController(NSObject):
         search_field.setContinuous_(False)
         search_field.setTarget_(self)
         search_field.setAction_("searchEnter:")
+        search_field.setFont_(NSFont.systemFontOfSize_(14))
         search_field.setAutoresizingMask_(2)
         hdr.addSubview_(search_field)
 
         query_btn = _btn("查询", self, "searchBtnClick:",
-                         NSMakeRect(right_w - 140, 12, 52, 26))
+                         NSMakeRect(right_w - 156, 17, 60, 32))
         query_btn.setAutoresizingMask_(1 | 8)
         hdr.addSubview_(query_btn)
 
         fav_btn = _HoverFavButton.alloc().initWithFrame_(
-            NSMakeRect(right_w - 80, 9, 32, 32))
+            NSMakeRect(right_w - 88, 15, 36, 36))
         fav_btn.setTarget_(self)
         fav_btn.setAction_("toggleFavorite:")
         fav_btn.setAutoresizingMask_(1 | 8)
         fav_btn.setToolTip_("收藏 / 取消收藏")
         hdr.addSubview_(fav_btn)
 
-        sidebar_btn = _HoverFavButton.alloc().initWithFrame_(NSMakeRect(right_w - 40, 9, 32, 32))
+        sidebar_btn = _HoverFavButton.alloc().initWithFrame_(NSMakeRect(right_w - 44, 15, 36, 36))
         sidebar_btn.setTitle_("☰")
-        sidebar_btn.setFont_(NSFont.systemFontOfSize_(16))
+        sidebar_btn.setFont_(NSFont.systemFontOfSize_(18))
         sidebar_btn.setContentTintColor_(NSColor.secondaryLabelColor())
         sidebar_btn.setToolTip_("显示/隐藏侧边栏")
         sidebar_btn.setTarget_(self)
