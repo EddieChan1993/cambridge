@@ -137,7 +137,11 @@ class AppDelegate(NSObject):
             self._status_item.button().setHighlighted_(True)
             self.performSelector_withObject_afterDelay_(
                 "_clearStatusHighlight:", None, 0.15)
-            self.main_window.showWindow()
+            self._settings_win.showWindow()
+
+    def applicationShouldHandleReopen_hasVisibleWindows_(self, app, flag):
+        self.main_window.showWindow()
+        return True
 
     @objc.IBAction
     def _clearStatusHighlight_(self, sender):
