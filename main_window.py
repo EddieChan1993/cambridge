@@ -267,13 +267,16 @@ class MainWindowController(NSObject):
         left = NSView.alloc().initWithFrame_(NSMakeRect(cw - LEFT_W, 0, LEFT_W, ch))
         left.setAutoresizingMask_(1 | 16)   # 左边距弹性 + 高度弹性 → 钉在右边
 
-        # [历史][收藏] segment — pin to top
+        # [历史][收藏] segment — 垂直居中在 RIGHT_HDR 头部区域
+        _seg_h = 32
+        _seg_y = ch - RIGHT_HDR + (RIGHT_HDR - _seg_h) // 2
         seg = NSSegmentedControl.alloc().initWithFrame_(
-            NSMakeRect(8, ch - 36, LEFT_W - 16, 28))
+            NSMakeRect(8, _seg_y, LEFT_W - 16, _seg_h))
         seg.setSegmentCount_(2)
         seg.setLabel_forSegment_("历史", 0)
         seg.setLabel_forSegment_("收藏", 1)
         seg.setSelectedSegment_(0)
+        seg.setFont_(NSFont.systemFontOfSize_(14))
         seg.setTarget_(self)
         seg.setAction_("segmentChanged:")
         seg.setAutoresizingMask_(2 | 8)
@@ -359,12 +362,14 @@ class MainWindowController(NSObject):
         search_field.setContinuous_(False)
         search_field.setTarget_(self)
         search_field.setAction_("searchEnter:")
-        search_field.setFont_(NSFont.systemFontOfSize_(14))
+        search_field.setFont_(NSFont.systemFontOfSize_(15))
+        search_field.cell().setControlSize_(3)   # NSControlSizeLarge — 光标/渲染跟着变大
         search_field.setAutoresizingMask_(2)
         hdr.addSubview_(search_field)
 
         query_btn = _btn("查询", self, "searchBtnClick:",
                          NSMakeRect(right_w - 156, 17, 60, 32))
+        query_btn.cell().setControlSize_(3)      # NSControlSizeLarge — 按钮渲染高度跟着变
         query_btn.setAutoresizingMask_(1 | 8)
         hdr.addSubview_(query_btn)
 

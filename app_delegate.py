@@ -63,7 +63,7 @@ class AppDelegate(NSObject):
         self._status_item = NSStatusBar.systemStatusBar().statusItemWithLength_(
             NSVariableStatusItemLength)
         btn = self._status_item.button()
-        btn.setTitle_("C")
+        btn.setTitle_("H")
         btn.setFont_(NSFont.boldSystemFontOfSize_(14))
         btn.setToolTip_("HotDict\n左键：显示主界面\n右键：菜单")
 
