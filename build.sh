@@ -14,28 +14,41 @@ done
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR"
 
-# ── 0. 关闭正在运行的旧版本 ────────────────────────────────────────────────
+BUILD_LOG=$(mktemp /tmp/cambridge_build_XXXXXX.log)
+trap 'rm -f "$BUILD_LOG"' EXIT
+
+# ── 打印工具 ────────────────────────────────────────────────────────────────
+_ok()   { printf "  \033[32m✓\033[0m  %s\n" "$*"; }
+_step() { printf "  \033[34m→\033[0m  %s" "$*"; }
+_done() { printf " \033[32mdone\033[0m\n"; }
+_skip() { printf " \033[90mskipped\033[0m\n"; }
+_fail() { printf " \033[31mfailed\033[0m\n"; }
+
+echo ""
+echo "  Cambridge Builder"
+echo "  ──────────────────────────────────────────"
+
+# ── 0. 关闭旧实例 ──────────────────────────────────────────────────────────
 PID_FILE="$HOME/.cambridge_tool/app.pid"
 if [ -f "$PID_FILE" ]; then
     OLD_PID=$(cat "$PID_FILE" 2>/dev/null || true)
     if [ -n "$OLD_PID" ] && kill -0 "$OLD_PID" 2>/dev/null; then
-        echo "==> 关闭正在运行的旧版本 (PID $OLD_PID)…"
         kill "$OLD_PID" 2>/dev/null || true
         sleep 0.5
+        _ok "Killed old instance (PID $OLD_PID)"
     fi
     rm -f "$PID_FILE"
 fi
-# 兜底：按名字杀，防止 pid 文件丢失但进程还在
 pkill -x "Cambridge" 2>/dev/null || true
 
-# 清除词条缓存（代码变更后保证拿到新格式数据）
+# 清除词条缓存
 CACHE_FILE="$HOME/.cambridge_tool/cache.json"
 if [ -f "$CACHE_FILE" ]; then
     rm -f "$CACHE_FILE"
-    echo "==> 词条缓存已清除。"
+    _ok "Cache cleared"
 fi
 
-# ── 1. 找到合适的 Python（3.9+，非 Anaconda）─────────────────────────────
+# ── 1. 找 Python ──────────────────────────────────────────────────────────
 _find_python() {
     for candidate in \
         /usr/local/bin/python3.12 \
@@ -59,89 +72,91 @@ _find_python() {
 
 PYTHON=$(_find_python)
 if [ -z "$PYTHON" ]; then
-    echo "❌  找不到 Python 3.9+（非 Anaconda）。"
-    echo "    请从 https://www.python.org 或 Homebrew 安装 Python 3.9+，然后重试。"
+    echo ""
+    echo "  \033[31m✗\033[0m  找不到 Python 3.9+（非 Anaconda）。"
+    echo "     请从 https://www.python.org 或 Homebrew 安装，然后重试。"
     exit 1
 fi
-echo "==> 使用 Python: $PYTHON  ($("$PYTHON" --version))"
+_ok "Python $("$PYTHON" --version 2>&1 | awk '{print $2}')  ($PYTHON)"
 
-# ── 2. Python 依赖（pip）────────────────────────────────────────────────────
+# ── 2. 安装依赖 ───────────────────────────────────────────────────────────
 REQ_HASH=$(md5 -q requirements.txt 2>/dev/null \
            || md5sum requirements.txt 2>/dev/null | awk '{print $1}')
 PIP_FLAG=".cache_pip_${REQ_HASH}"
 
 if [ ! -f "$PIP_FLAG" ]; then
-    echo "==> Installing Python dependencies…"
-    "$PYTHON" -m pip install -r requirements.txt --quiet
-    rm -f .cache_pip_*
-    touch "$PIP_FLAG"
+    _step "Installing dependencies…"
+    if "$PYTHON" -m pip install -r requirements.txt --quiet >>"$BUILD_LOG" 2>&1; then
+        rm -f .cache_pip_*
+        touch "$PIP_FLAG"
+        _done
+    else
+        _fail
+        echo ""; echo "── build log ──"; cat "$BUILD_LOG"; exit 1
+    fi
 else
-    echo "==> Python dependencies up-to-date (skipping pip install)."
+    _ok "Dependencies up-to-date"
 fi
 
-# ── 3. Icon conversion ──────────────────────────────────────────────────────
+# ── 3. Icon ───────────────────────────────────────────────────────────────
 if [ -f icon.png ]; then
     ICON_HASH=$(md5 -q icon.png 2>/dev/null \
                 || md5sum icon.png 2>/dev/null | awk '{print $1}')
     ICON_FLAG=".cache_icon_${ICON_HASH}"
     if [ ! -f "$ICON_FLAG" ]; then
-        echo "==> Converting icon.png → icon.icns…"
+        _step "Converting icon.png → icon.icns…"
         ICONSET="icon.iconset"
-        rm -rf "$ICONSET"
-        mkdir "$ICONSET"
-        sips -z 16   16   icon.png --out "$ICONSET/icon_16x16.png"      >/dev/null
-        sips -z 32   32   icon.png --out "$ICONSET/icon_16x16@2x.png"   >/dev/null
-        sips -z 32   32   icon.png --out "$ICONSET/icon_32x32.png"      >/dev/null
-        sips -z 64   64   icon.png --out "$ICONSET/icon_32x32@2x.png"   >/dev/null
-        sips -z 128  128  icon.png --out "$ICONSET/icon_128x128.png"    >/dev/null
-        sips -z 256  256  icon.png --out "$ICONSET/icon_128x128@2x.png" >/dev/null
-        sips -z 256  256  icon.png --out "$ICONSET/icon_256x256.png"    >/dev/null
-        sips -z 512  512  icon.png --out "$ICONSET/icon_256x256@2x.png" >/dev/null
-        sips -z 512  512  icon.png --out "$ICONSET/icon_512x512.png"    >/dev/null
-        sips -z 1024 1024 icon.png --out "$ICONSET/icon_512x512@2x.png" >/dev/null
-        iconutil -c icns "$ICONSET" -o icon.icns
+        rm -rf "$ICONSET" && mkdir "$ICONSET"
+        for size in 16 32 64 128 256 512 1024; do
+            sips -z $size $size icon.png --out "$ICONSET/icon_${size}x${size}.png" >/dev/null 2>&1 || true
+        done
+        sips -z 32   32   icon.png --out "$ICONSET/icon_16x16@2x.png"   >/dev/null 2>&1 || true
+        sips -z 64   64   icon.png --out "$ICONSET/icon_32x32@2x.png"   >/dev/null 2>&1 || true
+        sips -z 256  256  icon.png --out "$ICONSET/icon_128x128@2x.png" >/dev/null 2>&1 || true
+        sips -z 512  512  icon.png --out "$ICONSET/icon_256x256@2x.png" >/dev/null 2>&1 || true
+        sips -z 1024 1024 icon.png --out "$ICONSET/icon_512x512@2x.png" >/dev/null 2>&1 || true
+        iconutil -c icns "$ICONSET" -o icon.icns 2>>"$BUILD_LOG"
         rm -rf "$ICONSET"
         rm -f .cache_icon_*
         touch "$ICON_FLAG"
-        echo "    icon.icns created."
+        _done
     else
-        echo "==> icon.png unchanged, reusing icon.icns."
+        _ok "Icon unchanged"
     fi
-else
-    echo "==> No icon.png found; app will use default macOS icon."
 fi
 
-# ── 4. Build ────────────────────────────────────────────────────────────────
+# ── 4. Build ──────────────────────────────────────────────────────────────
 if $DEV_MODE; then
-    # 开发模式：alias 模式，只建符号链接，不复制不签名，几秒完成
-    echo "==> [开发模式] Running py2app --alias…"
+    _step "Building (dev / alias mode)…"
     rm -rf dist
-    "$PYTHON" setup.py py2app --alias 2>&1 \
-        | grep -v "replacing existing signature" \
-        | grep -v "^$"
-
-    if [ -d "dist/Cambridge.app" ]; then
-        echo ""
-        echo "✅  Dev build: dist/Cambridge.app"
-        echo "    （仅限本机，不可分发）"
+    if "$PYTHON" setup.py py2app --alias >>"$BUILD_LOG" 2>&1; then
+        _done
     else
-        echo "❌  Dev build failed."; exit 1
+        _fail
+        echo ""; echo "── build log ──"
+        grep -iE "(error|warning|exception|traceback)" "$BUILD_LOG" \
+            | grep -v "DeprecatedInstaller\|fetch_build_eggs\|setuptools" || cat "$BUILD_LOG"
+        exit 1
     fi
+
+    echo "  ──────────────────────────────────────────"
+    printf "  \033[32m✅  dist/Cambridge.app\033[0m  (dev build · local only)\n\n"
 else
-    # 完整打包：清理旧产物，重新打包
-    echo "==> Cleaning previous build artefacts…"
+    _step "Cleaning previous build…"
     rm -rf build dist
+    _done
 
-    echo "==> Running py2app…"
-    "$PYTHON" setup.py py2app 2>&1 \
-        | grep -v "replacing existing signature" \
-        | grep -v "^$"
-
-    if [ -d "dist/Cambridge.app" ]; then
-        echo ""
-        echo "✅  Build succeeded: dist/Cambridge.app"
-        echo "    拖入 /Applications 即可使用。"
+    _step "Building (full / distributable)…"
+    if "$PYTHON" setup.py py2app >>"$BUILD_LOG" 2>&1; then
+        _done
     else
-        echo "❌  Build failed — check output above."; exit 1
+        _fail
+        echo ""; echo "── build log ──"
+        grep -iE "(error|warning|exception|traceback)" "$BUILD_LOG" \
+            | grep -v "DeprecatedInstaller\|fetch_build_eggs\|setuptools" || cat "$BUILD_LOG"
+        exit 1
     fi
+
+    echo "  ──────────────────────────────────────────"
+    printf "  \033[32m✅  dist/Cambridge.app\033[0m  (drag to /Applications to install)\n\n"
 fi

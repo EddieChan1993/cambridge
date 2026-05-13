@@ -726,14 +726,22 @@ class MainWindowController(NSObject):
     def _playAudio_(self, url: str):
         if not url:
             return
-        import threading, subprocess, tempfile, os, urllib.request
+        import threading, subprocess, tempfile, os, requests as _req
         def _run():
             try:
-                req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-                with urllib.request.urlopen(req, timeout=10) as r:
-                    data = r.read()
+                headers = {
+                    "User-Agent": (
+                        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                        "AppleWebKit/537.36 (KHTML, like Gecko) "
+                        "Chrome/120.0.0.0 Safari/537.36"
+                    ),
+                    "Referer": "https://dictionary.cambridge.org/",
+                    "Accept": "audio/mpeg,audio/*;q=0.9,*/*;q=0.8",
+                }
+                r = _req.get(url, headers=headers, timeout=10)
+                r.raise_for_status()
                 with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as f:
-                    f.write(data)
+                    f.write(r.content)
                     tmp = f.name
                 subprocess.run(["afplay", tmp], check=False)
                 os.unlink(tmp)

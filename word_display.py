@@ -18,6 +18,8 @@ from AppKit import (
     NSBackgroundColorAttributeName,
     NSKernAttributeName,
     NSLinkAttributeName,
+    NSCursor,
+    NSTrackingArea,
 )
 
 
@@ -140,7 +142,7 @@ def build_attributed_string(data: dict) -> NSMutableAttributedString:
         _sep_ps.setTailIndent_(-50.0)  # 右侧留边距（含滚动条宽度）
         _append(mas, "─" * 120 + "\n",
                 {
-                    NSFontAttributeName: NSFont.boldSystemFontOfSize_(10),
+                    NSFontAttributeName: NSFont.boldSystemFontOfSize_(15),
                     NSForegroundColorAttributeName: NSColor.systemYellowColor(),
                     NSParagraphStyleAttributeName: _sep_ps,
                 })
@@ -223,9 +225,35 @@ def build_attributed_string(data: dict) -> NSMutableAttributedString:
 # ── Widget factory ────────────────────────────────────────────────────────────
 
 class _WordTextView(NSTextView):
-    """NSTextView that suppresses the link URL tooltip on hover."""
-    def setToolTip_(self, tooltip):
-        pass  # block dynamic tooltip set by NSTextView's link tracking
+    """NSTextView without URL tooltips and with pointer cursor over links."""
+
+    def addToolTipRect_owner_userData_(self, rect, owner, data):
+        return 0  # block all tooltip rects (suppresses link URL tooltip)
+
+    def updateTrackingAreas(self):
+        for area in list(self.trackingAreas()):
+            self.removeTrackingArea_(area)
+        # NSTrackingMouseMoved=0x02 | NSTrackingActiveAlways=0x80
+        opts = 0x02 | 0x80
+        area = NSTrackingArea.alloc().initWithRect_options_owner_userInfo_(
+            self.bounds(), opts, self, None)
+        self.addTrackingArea_(area)
+
+    def mouseMoved_(self, event):
+        point = self.convertPoint_fromView_(event.locationInWindow(), None)
+        idx = self.characterIndexForInsertionAtPoint_(point)
+        ts = self.textStorage()
+        if ts and idx < ts.length():
+            result = ts.attribute_atIndex_effectiveRange_(
+                NSLinkAttributeName, idx, None)
+            link_val = result[0] if isinstance(result, (list, tuple)) else result
+            if link_val:
+                NSCursor.pointingHandCursor().set()
+                return
+        NSCursor.arrowCursor().set()
+
+    def mouseExited_(self, event):
+        NSCursor.arrowCursor().set()
 
 
 def make_word_scroll_view(frame) -> tuple:
