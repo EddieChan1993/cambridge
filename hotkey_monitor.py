@@ -111,7 +111,9 @@ class HotkeyMonitor(NSObject):
             if not tap:
                 return False
             self._tap = tap
+            self._tap_callback = _cb   # keep Python ref so GC won't collect it
             src = Quartz.CFMachPortCreateRunLoopSource(None, tap, 0)
+            self._tap_src = src        # keep run-loop source alive too
             Quartz.CFRunLoopAddSource(
                 Quartz.CFRunLoopGetMain(), src, Quartz.kCFRunLoopCommonModes)
             Quartz.CGEventTapEnable(tap, True)
