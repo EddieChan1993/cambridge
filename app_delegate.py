@@ -316,30 +316,59 @@ class AppDelegate(NSObject):
 
         NSApplication.sharedApplication().setMainMenu_(main_menu)
 
-    # ── 辅助功能权限 ──────────────────────────────────────────────────────────
+    # ── 权限检查 ──────────────────────────────────────────────────────────────
 
     @objc.python_method
     def _checkAccessibility(self):
-        # AXTrustedCheckOptionPrompt=True 让系统自动弹出辅助功能授权对话框
-        trusted = Quartz.AXIsProcessTrustedWithOptions(
+        from AppKit import NSWorkspace
+        from Foundation import NSURL
+
+        accessibility = Quartz.AXIsProcessTrustedWithOptions(
             {"AXTrustedCheckOptionPrompt": True})
-        if not trusted:
-            lookup_str = self.settings.hotkey_display_string()
-            show_str   = self.settings.show_window_display_string()
-            alert = NSAlert.alloc().init()
-            alert.setMessageText_("需要辅助功能权限以启用全局快捷键")
-            alert.setInformativeText_(
-                f"快捷键（{lookup_str} 划词查询、{show_str} 呼出界面）"
-                "需要辅助功能权限。\n\n"
-                "系统已弹出授权对话框，请在「系统设置 → 隐私与安全性 → 辅助功能」"
-                "中勾选本应用，然后重启应用即可生效。"
-            )
-            alert.addButtonWithTitle_("好的")
-            alert.addButtonWithTitle_("打开系统设置")
-            if alert.runModal() != NSAlertFirstButtonReturn:
-                from AppKit import NSWorkspace
-                from Foundation import NSURL
+
+        # 检测输入监控：尝试创建一个被动 tap；失败即表示权限未授予
+        test_tap = Quartz.CGEventTapCreate(
+            Quartz.kCGSessionEventTap,
+            Quartz.kCGHeadInsertEventTap,
+            Quartz.kCGEventTapOptionDefault,
+            Quartz.CGEventMaskBit(Quartz.kCGEventKeyDown),
+            lambda *a: a[-2],   # 什么都不做，立即返回
+            None,
+        )
+        input_monitoring = test_tap is not None
+        if test_tap:
+            Quartz.CGEventTapEnable(test_tap, False)
+
+        missing = []
+        if not accessibility:
+            missing.append("• 辅助功能（Accessibility）")
+        if not input_monitoring:
+            missing.append("• 输入监控（Input Monitoring）")
+
+        if not missing:
+            return
+
+        lookup_str = self.settings.hotkey_display_string()
+        show_str   = self.settings.show_window_display_string()
+
+        alert = NSAlert.alloc().init()
+        alert.setMessageText_("需要授权才能使用全局快捷键")
+        alert.setInformativeText_(
+            f"快捷键（{lookup_str} 划词查询、{show_str} 呼出界面）需要以下权限：\n\n"
+            + "\n".join(missing)
+            + "\n\n请前往「系统设置 → 隐私与安全性」逐项开启，"
+            "完成后重启本应用即可生效。"
+        )
+        alert.addButtonWithTitle_("打开系统设置")
+        alert.addButtonWithTitle_("稍后再说")
+        if alert.runModal() == NSAlertFirstButtonReturn:
+            if not accessibility:
                 NSWorkspace.sharedWorkspace().openURL_(
                     NSURL.URLWithString_(
                         "x-apple.systempreferences:"
                         "com.apple.preference.security?Privacy_Accessibility"))
+            else:
+                NSWorkspace.sharedWorkspace().openURL_(
+                    NSURL.URLWithString_(
+                        "x-apple.systempreferences:"
+                        "com.apple.preference.security?Privacy_ListenEvent"))
