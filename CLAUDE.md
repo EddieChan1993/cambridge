@@ -183,6 +183,98 @@ content view (full window)
 - **`NSMakeRect` import**: cannot import from Foundation — use tuples.
 - **Status bar click highlight**: `menuWillOpen_` + `cancelTracking()` removes the system highlight; must manually call `setHighlighted_(True)` and schedule reset.
 
+## Global Hotkey — Lessons Learned (hard-won)
+
+### Why CGEventTap / NSEvent monitor silently fail in py2app --dev builds
+
+Both `CGEventTapCreate` and `NSEvent.addGlobalMonitorForEventsMatchingMask_handler_`
+require macOS TCC permissions (Accessibility and Input Monitoring respectively).
+**Each `--dev` rebuild changes the executable's code signature**, which silently
+invalidates the previously granted permission. Symptom: tap returns `None`, monitor
+registers successfully but handler is never called — no error, no crash.
+
+**Fix after any rebuild that changes the binary:**
+```bash
+tccutil reset Accessibility com.local.hotdict
+tccutil reset ListenEvent com.local.hotdict
+```
+Then relaunch the app — it will re-prompt for Accessibility; grant it, then manually
+enable Input Monitoring in System Settings → Privacy & Security → Input Monitoring.
+
+### HotkeyMonitor must be a plain Python class, not NSObject
+
+Using `NSObject` as the base class for `HotkeyMonitor` caused PyObjC to silently
+swallow exceptions inside `initWithDelegate_keycode_modifiers_` (the ObjC bridge
+catches them and returns `nil`), preventing `_register` from ever running.
+**Solution**: use a plain Python `class HotkeyMonitor:` with `__init__`, and update
+call sites in `app_delegate.py` from `HotkeyMonitor.alloc().initWith...()` to
+`HotkeyMonitor(delegate, keycode, modifiers)`.
+
+### Defer hotkey registration until the run loop is running
+
+`CGEventTapCreate` and `CFRunLoopAddSource` must be called after `NSApplication`
+has started its run loop. Calling them directly in `__init__` (which runs during
+`applicationDidFinishLaunching_`) is safe, but any Carbon APIs (e.g.
+`GetApplicationEventTarget`) will segfault at that point.
+Use `run_on_main_thread(lambda: self._start())` to defer if needed.
+
+### GC will collect Python callbacks passed to C APIs
+
+`CGEventTapCreate` takes a Python closure as callback. The Quartz C layer holds a
+C-level pointer — Python's GC does not see it and will collect the closure.
+**Always store callbacks as instance attributes:**
+```python
+self._tap_cb  = _cb   # prevent GC of CGEventTap callback
+self._tap_src = src   # prevent GC of CFRunLoopSource
+```
+Same applies to `NSEvent.addGlobalMonitorForEventsMatchingMask_handler_`:
+```python
+self._ns_handler = _handler   # prevent GC
+```
+
+### Carbon RegisterEventHotKey does NOT work in this AppKit + py2app context
+
+`GetApplicationEventTarget()` segfaults — the Carbon Event Manager is not
+initialised in a pure AppKit run loop. Do not attempt Carbon hotkey registration.
+Stick with CGEventTap (active, requires Accessibility) + NSEvent global monitor
+fallback (passive, requires Input Monitoring).
+
+### _log / file I/O: always specify encoding="utf-8"
+
+`open()` without encoding defaults to ASCII on some locales. Any Unicode character
+in a format string (e.g. `→`) will raise `UnicodeEncodeError`, which — if inside
+a `try/except Exception` block inside the CGEventTap callback — silently causes the
+callback to return the event unmodified instead of consuming it.
+```python
+# correct
+with open("/tmp/hotdict_init.log", "a", encoding="utf-8") as f:
+```
+
+### Hotkey lookup order: get selected text BEFORE stealing focus
+
+`hotkeyTriggered` must call `_getSelectedText()` **before** `showWindow()`.
+`showWindow()` activates HotDict, so any simulated `Cmd+C` sent afterwards goes to
+HotDict itself, not the source app.
+
+### Run _getSelectedText on a background thread
+
+`_getSelectedText` calls `time.sleep(0.15)` to wait for the clipboard.  Calling
+this on the main thread blocks the CGEventTap callback loop; macOS detects the
+stall, plays the system alert sound (beep), and may disable the tap.
+**Solution**: run `_getSelectedText` in a `threading.Thread`, then dispatch
+`showWindow` + `lookupWordInMainWindow_` back to the main thread via
+`run_on_main_thread`.
+
+### Debugging stdout is invisible in py2app builds
+
+`print()` goes to the app's stdout which is swallowed by py2app (even in `--dev`
+mode). `log stream --predicate 'process == "HotDict"'` only shows `os_log` /
+`NSLog` output. **Use file logging for all diagnostics:**
+```python
+with open("/tmp/hotdict_init.log", "a", encoding="utf-8") as f:
+    f.write(msg + "\n")
+```
+
 ## Dependencies
 
 ```
