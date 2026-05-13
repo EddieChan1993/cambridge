@@ -140,7 +140,7 @@ def build_attributed_string(data: dict) -> NSMutableAttributedString:
         _sep_ps.setParagraphSpacing_(12.0)
         _sep_ps.setLineBreakMode_(2)   # NSLineBreakByClipping
         _sep_ps.setTailIndent_(-50.0)  # 右侧留边距（含滚动条宽度）
-        _append(mas, "─" * 120 + "\n",
+        _append(mas, "─" * 44 + "\n",
                 {
                     NSFontAttributeName: NSFont.boldSystemFontOfSize_(15),
                     NSForegroundColorAttributeName: NSColor.systemYellowColor(),
@@ -149,7 +149,7 @@ def build_attributed_string(data: dict) -> NSMutableAttributedString:
 
         # POS badge + optional pos-level grammar
         if pos:
-            _append(mas, f" {pos.upper()} ",
+            _append(mas, f"{pos.upper()} ",
                     _attrs(f_pos, c_pos_fg,
                            _para(before=0, after=0),
                            bg=c_pos_bg, kern=0.5))
