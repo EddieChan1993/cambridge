@@ -99,6 +99,14 @@ else
 fi
 
 # ── 3. Icon ───────────────────────────────────────────────────────────────
+# Generate icon.png from logo.svg if not already present
+if [ ! -f icon.png ] && [ -f logo.svg ]; then
+    _step "Rendering logo.svg → icon.png…"
+    qlmanage -t -s 1024 -o /tmp/ logo.svg >/dev/null 2>&1 && \
+        cp /tmp/logo.svg.png icon.png && _ok "Rendered icon.png from logo.svg" || \
+        _warn "Could not render logo.svg (qlmanage failed)"
+fi
+
 if [ -f icon.png ]; then
     ICON_HASH=$(md5 -q icon.png 2>/dev/null \
                 || md5sum icon.png 2>/dev/null | awk '{print $1}')

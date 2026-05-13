@@ -300,7 +300,7 @@ class MainWindowController(NSObject):
         stat_label.setEditable_(False)
         stat_label.setBezeled_(False)
         stat_label.setDrawsBackground_(False)
-        stat_label.setAlignment_(2)   # NSTextAlignmentCenter
+        stat_label.setAlignment_(1)   # NSTextAlignmentCenter
         stat_label.setFont_(NSFont.systemFontOfSize_(10))
         stat_label.setTextColor_(NSColor.tertiaryLabelColor())
         stat_label.setAutoresizingMask_(2 | 32)
@@ -444,7 +444,7 @@ class MainWindowController(NSObject):
             f.setStringValue_(text)
             f.setBezeled_(False); f.setDrawsBackground_(False)
             f.setEditable_(False); f.setSelectable_(False)
-            f.setAlignment_(2)   # NSTextAlignmentCenter
+            f.setAlignment_(1)   # NSTextAlignmentCenter
             f.setAutoresizingMask_(2)
             f.setFont_(NSFont.boldSystemFontOfSize_(size) if bold
                        else NSFont.systemFontOfSize_(size))
