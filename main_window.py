@@ -681,15 +681,17 @@ class MainWindowController(NSObject):
         self._ov_icon.setStringValue_(icon)
         self._ov_title.setStringValue_(title)
         self._ov_hint.setStringValue_(hint)
-        # 每次显示时根据当前 overlay 实际尺寸重新居中 inner
-        ov = self._overlay.bounds()
+        # 从父视图（right panel）实时读取尺寸，autoresizing 未必及时更新
+        right_b = self._overlay.superview().bounds()
+        ov_w = right_b.size.width
+        ov_h = right_b.size.height - RIGHT_HDR - 1
+        self._overlay.setFrame_(NSMakeRect(0, 0, ov_w, ov_h))
         ih = self._overlay_inner_h
-        iw = ov.size.width
         self._overlay_inner.setFrame_(
-            NSMakeRect(0, (ov.size.height - ih) / 2, iw, ih))
+            NSMakeRect(0, (ov_h - ih) / 2, ov_w, ih))
         for lbl in (self._ov_icon, self._ov_title, self._ov_hint):
             f = lbl.frame()
-            lbl.setFrame_(NSMakeRect(0, f.origin.y, iw, f.size.height))
+            lbl.setFrame_(NSMakeRect(0, f.origin.y, ov_w, f.size.height))
         self._scroll_content.setHidden_(True)
         self._overlay.setHidden_(False)
 
