@@ -624,12 +624,23 @@ class MainWindowController(NSObject):
         word = (sender.stringValue() or "").strip()
         if word and self._delegate:
             self._delegate.lookupWordInMainWindow_(word)
+        elif not word:
+            self._resetToWelcome()
 
     @objc.IBAction
     def searchBtnClick_(self, sender):
         word = (self._search_field.stringValue() or "").strip()
         if word and self._delegate:
             self._delegate.lookupWordInMainWindow_(word)
+        elif not word:
+            self._resetToWelcome()
+
+    @objc.python_method
+    def _resetToWelcome(self):
+        self._current_word = None
+        self._current_data = None
+        self._updateFavBtn_(False)
+        self._showOverlay("📖", "输入单词开始查询", "支持英文单词 · 划词快捷键 · 历史收藏")
 
     @objc.IBAction
     def toggleFavorite_(self, sender):
