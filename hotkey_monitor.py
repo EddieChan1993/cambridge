@@ -6,8 +6,9 @@ No Accessibility / Input Monitoring permission required.
 import ctypes
 import ctypes.util
 
-import objc
-from Foundation import NSObject
+# confirm module is loaded
+with open("/tmp/hotdict_init.log", "w") as _f:
+    _f.write("hotkey_monitor imported\n")
 
 # ── Carbon ctypes bindings ────────────────────────────────────────────────────
 
@@ -89,6 +90,8 @@ _handler_installed = False
 
 
 def _on_hotkey(call_ref, event_ref, user_data):
+    with open("/tmp/hotdict_hotkey.log", "a") as f:
+        f.write("_on_hotkey called\n")
     hkid = _EventHotKeyID()
     _carbon.GetEventParameter(
         event_ref,
@@ -100,9 +103,16 @@ def _on_hotkey(call_ref, event_ref, user_data):
         ctypes.byref(hkid),
     )
     monitor = _registry.get(hkid.id)
+    with open("/tmp/hotdict_hotkey.log", "a") as f:
+        f.write(f"hkid={hkid.id} monitor={monitor}\n")
     if monitor is not None:
         monitor._fire()
     return noErr
+
+
+def _log(msg):
+    with open("/tmp/hotdict_init.log", "a") as f:
+        f.write(msg + "\n")
 
 
 def _ensure_handler():
@@ -111,8 +121,9 @@ def _ensure_handler():
         return
 
     target = _carbon.GetApplicationEventTarget()
+    _log(f"GetApplicationEventTarget → {target}")
     if not target:
-        print("[HotkeyMonitor] GetApplicationEventTarget returned NULL — skipping")
+        _log("ERROR: target is NULL, aborting")
         return
 
     spec = _EventTypeSpec(kEventClassKeyboard, kEventHotKeyPressed)
@@ -127,11 +138,11 @@ def _ensure_handler():
         None,
         None,
     )
+    _log(f"InstallEventHandler → status={status}")
     if status == noErr:
         _handler_installed = True
-        print("[HotkeyMonitor] Carbon event handler installed")
     else:
-        print(f"[HotkeyMonitor] InstallEventHandler failed: {status}")
+        _log(f"ERROR: InstallEventHandler failed status={status}")
 
 
 # ── Public class (same interface as before) ───────────────────────────────────
@@ -139,12 +150,9 @@ def _ensure_handler():
 _next_id = 1
 
 
-class HotkeyMonitor(NSObject):
+class HotkeyMonitor:
 
-    def initWithDelegate_keycode_modifiers_(self, delegate, keycode, modifiers):
-        self = objc.super(HotkeyMonitor, self).init()
-        if self is None:
-            return None
+    def __init__(self, delegate, keycode, modifiers):
         global _next_id
         self._delegate   = delegate
         self._keycode    = int(keycode)
@@ -153,17 +161,15 @@ class HotkeyMonitor(NSObject):
         _next_id        += 1
         self._ref        = ctypes.c_void_p()
         self._registered = False
+        _log(f"init kc={keycode} mods={modifiers}")
         self._register()
-        return self
 
-    @objc.python_method
     def stop(self):
         if self._registered:
             _carbon.UnregisterEventHotKey(self._ref)
             _registry.pop(self._hk_id, None)
             self._registered = False
 
-    @objc.python_method
     def _register(self):
         _ensure_handler()
         if not _handler_installed:
@@ -183,15 +189,15 @@ class HotkeyMonitor(NSObject):
             ctypes.c_uint32(0),
             ctypes.byref(self._ref),
         )
+        _log(f"RegisterEventHotKey kc={self._keycode} mods={self._modifiers} → status={status} ref={self._ref}")
         if status == noErr:
             _registry[self._hk_id] = self
             self._registered = True
-            print(f"[HotkeyMonitor] registered id={self._hk_id} "
-                  f"kc={self._keycode} mods={self._modifiers}")
         else:
-            print(f"[HotkeyMonitor] RegisterEventHotKey failed status={status}")
+            _log(f"ERROR: RegisterEventHotKey failed")
 
-    @objc.python_method
     def _fire(self):
+        with open("/tmp/hotdict_hotkey.log", "a") as f:
+            f.write(f"_fire called delegate={self._delegate}\n")
         from utils import run_on_main_thread
         run_on_main_thread(lambda: self._delegate.hotkeyTriggered())

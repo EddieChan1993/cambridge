@@ -97,13 +97,13 @@ class AppDelegate(NSObject):
             ).initWithSettings_delegate_(self.settings, self)
 
         # ── 全局快捷键：划词查询 ─────────────────────────────────────────────
-        self._hotkey = HotkeyMonitor.alloc().initWithDelegate_keycode_modifiers_(
+        self._hotkey = HotkeyMonitor(
             self, self.settings.hotkey_keycode, self.settings.hotkey_modifiers)
 
         # ── 全局快捷键：呼出主界面 ───────────────────────────────────────────
         self._show_shim = _HotkeyShim.alloc().init()
         self._show_shim.setup(self._onShowWindowHotkey)
-        self._show_hotkey = HotkeyMonitor.alloc().initWithDelegate_keycode_modifiers_(
+        self._show_hotkey = HotkeyMonitor(
             self._show_shim,
             self.settings.show_window_keycode,
             self.settings.show_window_modifiers,
@@ -172,15 +172,13 @@ class AppDelegate(NSObject):
     def applyNewHotkey(self, keycode: int, modifiers: list):
         if self._hotkey:
             self._hotkey.stop()
-        self._hotkey = HotkeyMonitor.alloc().initWithDelegate_keycode_modifiers_(
-            self, keycode, modifiers)
+        self._hotkey = HotkeyMonitor(self, keycode, modifiers)
 
     @objc.python_method
     def applyNewShowWindowHotkey(self, keycode: int, modifiers: list):
         if self._show_hotkey:
             self._show_hotkey.stop()
-        self._show_hotkey = HotkeyMonitor.alloc().initWithDelegate_keycode_modifiers_(
-            self._show_shim, keycode, modifiers)
+        self._show_hotkey = HotkeyMonitor(self._show_shim, keycode, modifiers)
 
     @objc.python_method
     def _onShowWindowHotkey(self):
