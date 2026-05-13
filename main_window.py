@@ -293,13 +293,14 @@ class MainWindowController(NSObject):
 
         # Word list scroll + table — fills between top and bottom areas
         _BTN_H  = 36    # height reserved at bottom for action buttons
-        _STAT_H = 20    # stat label height above button area
+        _STAT_H = 20    # stat label band height above button area
+        _LBL_H  = 13    # tight label height so text is vertically centred
         stat_label = NSTextField.alloc().initWithFrame_(
-            NSMakeRect(0, _BTN_H, LEFT_W, _STAT_H))
+            NSMakeRect(0, _BTN_H + (_STAT_H - _LBL_H) // 2, LEFT_W, _LBL_H))
         stat_label.setEditable_(False)
         stat_label.setBezeled_(False)
         stat_label.setDrawsBackground_(False)
-        stat_label.setAlignment_(1)   # NSTextAlignmentCenter
+        stat_label.setAlignment_(2)   # NSTextAlignmentCenter
         stat_label.setFont_(NSFont.systemFontOfSize_(10))
         stat_label.setTextColor_(NSColor.tertiaryLabelColor())
         stat_label.setAutoresizingMask_(2 | 32)
