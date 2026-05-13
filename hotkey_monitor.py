@@ -10,10 +10,10 @@ from AppKit import NSEvent, NSEventMaskKeyDown
 # ── Debug log ─────────────────────────────────────────────────────────────────
 
 def _log(msg):
-    with open("/tmp/hotdict_init.log", "a") as f:
+    with open("/tmp/hotdict_init.log", "a", encoding="utf-8") as f:
         f.write(msg + "\n")
 
-with open("/tmp/hotdict_init.log", "w") as _f:
+with open("/tmp/hotdict_init.log", "w", encoding="utf-8") as _f:
     _f.write("hotkey_monitor imported\n")
 
 # ── Modifier maps ─────────────────────────────────────────────────────────────
