@@ -1,157 +1,135 @@
 """
-Global hotkey monitor — configurable keycode + modifier set.
-Uses Quartz CGEventTap (requires Accessibility / Input Monitoring permission).
-Falls back to NSEvent global monitor if the tap cannot be created.
+Global hotkey via Carbon RegisterEventHotKey (ctypes).
+No Accessibility / Input Monitoring permission required.
 """
+
+import ctypes
+import ctypes.util
 
 import objc
 from Foundation import NSObject
-import Quartz
 
-# Quartz modifier-flag constants mapped from settings mod names
-_QUARTZ_MODS = {
-    "cmd":   Quartz.kCGEventFlagMaskCommand,
-    "shift": Quartz.kCGEventFlagMaskShift,
-    "alt":   Quartz.kCGEventFlagMaskAlternate,
-    "ctrl":  Quartz.kCGEventFlagMaskControl,
+# ── Carbon ctypes bindings ────────────────────────────────────────────────────
+
+_carbon = ctypes.CDLL(ctypes.util.find_library("Carbon"))
+
+# Carbon modifier masks (NOT the same as CGEvent masks)
+_CARBON_MODS = {
+    "cmd":   0x0100,
+    "shift": 0x0200,
+    "alt":   0x0800,
+    "ctrl":  0x1000,
 }
 
-# NSEvent modifier flag values (same numeric values as Quartz)
-_NS_MODS = {
-    "cmd":   0x100000,
-    "shift": 0x020000,
-    "alt":   0x080000,
-    "ctrl":  0x040000,
-}
+kEventClassKeyboard = 0x6B657973   # 'keys'
+kEventHotKeyPressed = 5
+kEventParamDirectObject = 0x2D2D2D2D  # '----'
+typeEventHotKeyID    = 0x686B6579   # 'hkey'
+_HK_SIGNATURE        = 0x48444B59   # 'HDKY'
+
+
+class _EventHotKeyID(ctypes.Structure):
+    _fields_ = [("signature", ctypes.c_uint32), ("id", ctypes.c_uint32)]
+
+
+class _EventTypeSpec(ctypes.Structure):
+    _fields_ = [("eventClass", ctypes.c_uint32), ("eventKind", ctypes.c_uint32)]
+
+
+_HandlerProc = ctypes.CFUNCTYPE(
+    ctypes.c_int32,    # OSStatus
+    ctypes.c_void_p,   # EventHandlerCallRef
+    ctypes.c_void_p,   # EventRef
+    ctypes.c_void_p,   # userData
+)
+
+_carbon.RegisterEventHotKey.restype   = ctypes.c_int32
+_carbon.UnregisterEventHotKey.restype = ctypes.c_int32
+_carbon.GetApplicationEventTarget.restype = ctypes.c_void_p
+_carbon.InstallEventHandler.restype   = ctypes.c_int32
+_carbon.GetEventParameter.restype     = ctypes.c_int32
+
+# ── Module-level handler (one handler for all hotkeys) ────────────────────────
+
+_registry: dict[int, "HotkeyMonitor"] = {}
+_handler_installed = False
+_c_upp = None          # keep alive
+
+
+def _on_hotkey(call_ref, event_ref, user_data):
+    hkid = _EventHotKeyID()
+    _carbon.GetEventParameter(
+        event_ref, kEventParamDirectObject, typeEventHotKeyID,
+        None, ctypes.sizeof(hkid), None, ctypes.byref(hkid))
+    monitor = _registry.get(hkid.id)
+    if monitor is not None:
+        monitor._fire()
+    return 0
+
+
+def _ensure_handler():
+    global _handler_installed
+    if _handler_installed:
+        return
+    spec = _EventTypeSpec(kEventClassKeyboard, kEventHotKeyPressed)
+    raw_cb = _HandlerProc(_on_hotkey)
+    _ensure_handler._cb = raw_cb   # keep Python ref so GC won't collect it
+    _carbon.InstallEventHandler(
+        _carbon.GetApplicationEventTarget(),
+        raw_cb, 1, ctypes.byref(spec),
+        None, None)
+    _handler_installed = True
+
+
+# ── Public class (same interface as before) ───────────────────────────────────
+
+_next_id = 1
 
 
 class HotkeyMonitor(NSObject):
-    """
-    initWithDelegate_keycode_modifiers_  — pass an object with a hotkeyTriggered method,
-    the virtual key-code (int), and a list of modifier names from {"cmd","shift","alt","ctrl"}.
-    """
 
     def initWithDelegate_keycode_modifiers_(self, delegate, keycode, modifiers):
         self = objc.super(HotkeyMonitor, self).init()
         if self is None:
             return None
+        global _next_id
         self._delegate  = delegate
         self._keycode   = int(keycode)
-        self._modifiers = set(modifiers)
-        self._tap       = None
-        self._monitor   = None
-        self._running   = False
-        self._start()
+        self._modifiers = list(modifiers)
+        self._hk_id     = _next_id
+        _next_id += 1
+        self._ref       = ctypes.c_void_p()
+        self._registered = False
+        self._register()
         return self
 
-    # ── Public ───────────────────────────────────────────────────────────────
-
+    @objc.python_method
     def stop(self):
-        self._running = False
-        if self._tap:
-            Quartz.CGEventTapEnable(self._tap, False)
-            self._tap = None
-        if self._monitor:
-            from AppKit import NSEvent
-            NSEvent.removeMonitor_(self._monitor)
-            self._monitor = None
-
-    # ── Internal ─────────────────────────────────────────────────────────────
+        if self._registered:
+            _carbon.UnregisterEventHotKey(self._ref)
+            _registry.pop(self._hk_id, None)
+            self._registered = False
 
     @objc.python_method
-    def _start(self):
-        print(f"[HotkeyMonitor] starting — keycode={self._keycode} mods={self._modifiers}")
-        ok = self._try_event_tap()
-        print(f"[HotkeyMonitor] CGEventTap created: {ok}")
-        if not ok:
-            self._try_ns_monitor()
-            print("[HotkeyMonitor] fell back to NSEvent global monitor")
-
-    @objc.python_method
-    def _matches(self, keycode: int, flags: int) -> bool:
-        if keycode != self._keycode:
-            return False
-        for mod, mask in _QUARTZ_MODS.items():
-            has  = bool(flags & mask)
-            want = mod in self._modifiers
-            if has != want:
-                return False
-        return True
-
-    @objc.python_method
-    def _try_event_tap(self) -> bool:
-        mon = self
-
-        def _cb(proxy, event_type, event, refcon):
-            try:
-                if event_type in (
-                    Quartz.kCGEventTapDisabledByUserInput,
-                    Quartz.kCGEventTapDisabledByTimeout,
-                ):
-                    if mon._tap:
-                        Quartz.CGEventTapEnable(mon._tap, True)
-                    return event
-
-                if event_type == Quartz.kCGEventKeyDown:
-                    kc    = Quartz.CGEventGetIntegerValueField(
-                        event, Quartz.kCGKeyboardEventKeycode)
-                    flags = Quartz.CGEventGetFlags(event)
-                    print(f"[HotkeyMonitor] keydown kc={kc} flags={hex(int(flags))} want_kc={mon._keycode} want_mods={mon._modifiers}")
-                if mon._matches(int(kc), int(flags)):
-                        mon._fire()
-                        return None     # consume
-            except Exception as exc:
-                print(f"[HotkeyMonitor] callback error: {exc}")
-            return event
-
-        try:
-            tap = Quartz.CGEventTapCreate(
-                Quartz.kCGSessionEventTap,
-                Quartz.kCGHeadInsertEventTap,
-                Quartz.kCGEventTapOptionDefault,
-                Quartz.CGEventMaskBit(Quartz.kCGEventKeyDown),
-                _cb,
-                None,
-            )
-            if not tap:
-                return False
-            self._tap = tap
-            self._tap_callback = _cb   # keep Python ref so GC won't collect it
-            src = Quartz.CFMachPortCreateRunLoopSource(None, tap, 0)
-            self._tap_src = src        # keep run-loop source alive too
-            Quartz.CFRunLoopAddSource(
-                Quartz.CFRunLoopGetMain(), src, Quartz.kCFRunLoopCommonModes)
-            Quartz.CGEventTapEnable(tap, True)
-            self._running = True
-            return True
-        except Exception as exc:
-            print(f"[HotkeyMonitor] CGEventTap failed: {exc}")
-            return False
-
-    @objc.python_method
-    def _try_ns_monitor(self):
-        from AppKit import NSEvent, NSEventMaskKeyDown
-        mon = self
-
-        def _handler(event):
-            try:
-                kc    = event.keyCode()
-                flags = event.modifierFlags()
-                ns_flags = 0
-                for mod, mask in _NS_MODS.items():
-                    if flags & mask:
-                        ns_flags |= _QUARTZ_MODS[mod]
-                print(f"[HotkeyMonitor][NS] keydown kc={kc} ns_flags={hex(ns_flags)}")
-                if mon._matches(int(kc), int(ns_flags)):
-                    mon._fire()
-            except Exception as exc:
-                print(f"[HotkeyMonitor] NSEvent monitor error: {exc}")
-
-        self._ns_handler = _handler   # keep Python ref
-        self._monitor = NSEvent.addGlobalMonitorForEventsMatchingMask_handler_(
-            NSEventMaskKeyDown, _handler)
-        print(f"[HotkeyMonitor] NSEvent monitor registered: {self._monitor is not None}")
-        self._running = True
+    def _register(self):
+        _ensure_handler()
+        mod_mask = sum(_CARBON_MODS.get(m, 0) for m in self._modifiers)
+        hkid = _EventHotKeyID(signature=_HK_SIGNATURE, id=self._hk_id)
+        status = _carbon.RegisterEventHotKey(
+            ctypes.c_uint32(self._keycode),
+            ctypes.c_uint32(mod_mask),
+            hkid,
+            _carbon.GetApplicationEventTarget(),
+            ctypes.c_uint32(0),
+            ctypes.byref(self._ref),
+        )
+        if status == 0:
+            _registry[self._hk_id] = self
+            self._registered = True
+            print(f"[HotkeyMonitor] registered id={self._hk_id} "
+                  f"kc={self._keycode} mods={self._modifiers}")
+        else:
+            print(f"[HotkeyMonitor] RegisterEventHotKey failed status={status}")
 
     @objc.python_method
     def _fire(self):
