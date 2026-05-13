@@ -161,12 +161,14 @@ class AppDelegate(NSObject):
     def hotkeyTriggered(self):
         def _bg():
             word = self._getSelectedText()
-            if word:
-                word = word.strip()
+            if not word:
+                return
+            word = word.strip()
+            if not word:
+                return
             def _main():
                 self.main_window.showWindow()
-                if word:
-                    self.lookupWordInMainWindow_(word)
+                self.lookupWordInMainWindow_(word)
             run_on_main_thread(_main)
         threading.Thread(target=_bg, daemon=True).start()
 
