@@ -8,7 +8,7 @@ set -e
 
 DEV_MODE=false
 for arg in "$@"; do
-  [ "$arg" = "--dev" ] && DEV_MODE=true
+  case "$arg" in --dev|-dev|-d|–dev|—dev) DEV_MODE=true ;; esac
 done
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
