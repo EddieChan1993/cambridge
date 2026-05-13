@@ -159,12 +159,16 @@ class AppDelegate(NSObject):
 
     @objc.python_method
     def hotkeyTriggered(self):
-        word = self._getSelectedText()   # must run before we steal focus
-        if word:
-            word = word.strip()
-        self.main_window.showWindow()
-        if word:
-            self.lookupWordInMainWindow_(word)
+        def _bg():
+            word = self._getSelectedText()
+            if word:
+                word = word.strip()
+            def _main():
+                self.main_window.showWindow()
+                if word:
+                    self.lookupWordInMainWindow_(word)
+            run_on_main_thread(_main)
+        threading.Thread(target=_bg, daemon=True).start()
 
     # ── 设置回调 ──────────────────────────────────────────────────────────────
 
