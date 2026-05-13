@@ -12,6 +12,13 @@ _DEFAULT_BASE_URL = (
     "%E8%AF%8D%E5%85%B8/%E8%8B%B1%E8%AF%AD-%E6%B1%89%E8%AF%AD-%E7%B9%81%E4%BD%93"
 )
 
+# Fallback chain: simplified Chinese → English-only
+_FALLBACK_URLS = [
+    "https://dictionary.cambridge.org/zhs/"
+    "%E8%AF%8D%E5%85%B8/%E8%8B%B1%E8%AF%AD-%E6%B1%89%E8%AF%AD-%E7%AE%80%E4%BD%93",
+    "https://dictionary.cambridge.org/dictionary/english",
+]
+
 HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
@@ -33,25 +40,45 @@ def _text(el, sep=" ") -> str:
     return text
 
 
+def _fetch(url: str) -> tuple:
+    """Fetch URL, return (response, soup) or raise RequestException."""
+    resp = requests.get(url, headers=HEADERS, timeout=15)
+    resp.raise_for_status()
+    return resp, BeautifulSoup(resp.text, "lxml")
+
+
 def scrape_cambridge(word: str, base_url: str = "") -> dict:
-    base = base_url.strip().rstrip("/") if base_url else _DEFAULT_BASE_URL
-    url = f"{base}/{word.lower().strip()}"
+    primary = base_url.strip().rstrip("/") if base_url else _DEFAULT_BASE_URL
+    slug = word.lower().strip()
+    url = f"{primary}/{slug}"
     result = {"word": word.strip(), "url": url, "pronunciations": [], "entries": []}
 
+    # Try primary URL, then fallbacks if the server redirected away from the word.
+    # Skip fallback URLs that duplicate the primary to avoid redundant requests.
+    fallbacks = [u for u in _FALLBACK_URLS if u.rstrip("/") != primary]
     last_err = None
-    for attempt in range(3):
+    resp = soup = None
+    for base in [primary] + fallbacks:
+        try_url = f"{base}/{slug}"
         try:
-            resp = requests.get(url, headers=HEADERS, timeout=15)
-            resp.raise_for_status()
             last_err = None
-            break
+            resp, soup = _fetch(try_url)
         except requests.RequestException as e:
             last_err = e
-    if last_err:
+            continue
+        # Cambridge redirects unknown words back to the dictionary root — detect that
+        if slug in resp.url.lower():
+            result["url"] = try_url
+            break
+        # This base had no entry; try next fallback
+        resp = soup = None
+
+    if last_err and soup is None:
         result["error"] = str(last_err)
         return result
-
-    soup = BeautifulSoup(resp.text, "lxml")
+    if soup is None:
+        result["error"] = "No dictionary entry found"
+        return result
 
     # ── 音标 ──────────────────────────────────────────────────────────────────
     # 直接找所有 .ipa 元素，再向上找最近的 region 标签
@@ -108,11 +135,29 @@ def scrape_cambridge(word: str, base_url: str = "") -> dict:
         return result
 
     for block in blocks:
-        pos_el = block.select_one(".pos.dpos") or block.select_one(".pos")
-        pos = _text(pos_el)
+        # Collect all POS labels from the entry header (e.g. "adjective, adverb")
+        pos_header = block.select_one(".pos-header") or block.select_one(".dpos-h")
+        if pos_header:
+            pos_els = pos_header.select(".pos.dpos") or pos_header.select(".pos")
+        else:
+            pos_els = block.select(".pos.dpos") or block.select(".pos")
+        pos = ", ".join(_text(e) for e in pos_els if _text(e))
+
+        # Source dictionary name from ancestor superentry/dictionary header
+        source = ""
+        ancestor = block.parent
+        while ancestor and ancestor.name not in ("body", None):
+            if any(c in (ancestor.get("class") or [])
+                   for c in ("superentry", "dictionary")):
+                title_el = ancestor.select_one(".c_hh")
+                if title_el:
+                    raw = title_el.get_text(separator="", strip=True)
+                    if "|" in raw:
+                        source = raw.split("|", 1)[1].strip()
+                break
+            ancestor = ancestor.parent
 
         # Entry-level grammar note e.g. "[ C or U ]"
-        pos_header = block.select_one(".pos-header") or block.select_one(".dpos-h")
         if pos_header:
             eg = pos_header.select_one(".gram.dgram") or pos_header.select_one(".gram")
             pos_gram = _text(eg) if eg else ""
@@ -155,7 +200,8 @@ def scrape_cambridge(word: str, base_url: str = "") -> dict:
 
         if pos or definitions:
             result["entries"].append({
-                "pos": pos, "pos_gram": pos_gram, "definitions": definitions})
+                "pos": pos, "pos_gram": pos_gram,
+                "source": source, "definitions": definitions})
 
     if not result["entries"]:
         result["error"] = "No definitions found"

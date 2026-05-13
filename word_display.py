@@ -132,6 +132,7 @@ def build_attributed_string(data: dict) -> NSMutableAttributedString:
     for i, entry in enumerate(entries):
         pos      = entry.get("pos", "")
         pos_gram = entry.get("pos_gram", "")
+        source   = entry.get("source", "")
         defs     = entry.get("definitions", [])
 
         # Yellow divider — repeated ─ characters, clipped at line end
@@ -147,15 +148,38 @@ def build_attributed_string(data: dict) -> NSMutableAttributedString:
                     NSParagraphStyleAttributeName: _sep_ps,
                 })
 
-        # POS badge + optional pos-level grammar
+        # Source bar: "word | Source Name" on full-width yellow background
+        if source:
+            _src_ps = NSMutableParagraphStyle.alloc().init()
+            _src_ps.setParagraphSpacingBefore_(0)
+            _src_ps.setParagraphSpacing_(10.0)
+            _src_ps.setLineBreakMode_(2)   # NSLineBreakByClipping
+            _src_ps.setTailIndent_(-50.0)
+            _src_bg = NSColor.systemYellowColor()
+            _src_fg = NSColor.colorWithWhite_alpha_(0.12, 1.0)  # near-black on yellow
+            # Bold word portion
+            _append(mas, f" {word} ",
+                    {NSFontAttributeName: NSFont.boldSystemFontOfSize_(13),
+                     NSForegroundColorAttributeName: _src_fg,
+                     NSBackgroundColorAttributeName: _src_bg,
+                     NSParagraphStyleAttributeName: _src_ps})
+            # Separator + source name + trailing spaces to fill width
+            _append(mas, f"| {source}" + " " * 120 + "\n",
+                    {NSFontAttributeName: NSFont.systemFontOfSize_(13),
+                     NSForegroundColorAttributeName: _src_fg,
+                     NSBackgroundColorAttributeName: _src_bg,
+                     NSParagraphStyleAttributeName: _src_ps})
+
+        # POS badge(s) + optional pos-level grammar
         if pos:
-            _append(mas, f"{pos.upper()} ",
-                    _attrs(f_pos, c_pos_fg,
-                           _para(before=0, after=0),
-                           bg=c_pos_bg, kern=0.5))
+            badge_para = _para(before=0, after=0)
+            for part in [p.strip() for p in pos.split(",") if p.strip()]:
+                _append(mas, f"{part.upper()} ",
+                        _attrs(f_pos, c_pos_fg, badge_para, bg=c_pos_bg, kern=0.5))
+                _append(mas, " ", _attrs(f_note, c_note, badge_para))
             if pos_gram:
-                _append(mas, f"  {pos_gram}",
-                        _attrs(f_note, c_note, _para(before=0, after=0)))
+                _append(mas, f" {pos_gram}",
+                        _attrs(f_note, c_note, badge_para))
             _append(mas, "\n", _attrs(f_pos, c_pos_fg, _para(after=8)))
 
         single = len(defs) == 1

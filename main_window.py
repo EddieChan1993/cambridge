@@ -430,7 +430,7 @@ class MainWindowController(NSObject):
             f.setStringValue_(text)
             f.setBezeled_(False); f.setDrawsBackground_(False)
             f.setEditable_(False); f.setSelectable_(False)
-            f.setAlignment_(1)   # NSTextAlignmentCenter
+            f.setAlignment_(2)   # NSTextAlignmentCenter
             f.setAutoresizingMask_(2)
             f.setFont_(NSFont.boldSystemFontOfSize_(size) if bold
                        else NSFont.systemFontOfSize_(size))
