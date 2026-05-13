@@ -17,6 +17,7 @@ from AppKit import (
     NSForegroundColorAttributeName,
     NSBackgroundColorAttributeName,
     NSKernAttributeName,
+    NSLinkAttributeName,
 )
 
 
@@ -98,15 +99,31 @@ def build_attributed_string(data: dict) -> NSMutableAttributedString:
     # ── Pronunciations ───────────────────────────────────────────────────────
     if pronunciations:
         for p in pronunciations:
-            lbl = p.get("label", "").strip()
-            ipa = p.get("ipa", "").strip()
+            lbl       = p.get("label", "").strip()
+            ipa       = p.get("ipa", "").strip()
+            audio_url = p.get("audio", "").strip()
             if not ipa:
                 continue
+            para = _para(line=3)
+            if audio_url:
+                spk_attrs = {
+                    NSFontAttributeName: NSFont.systemFontOfSize_(12),
+                    NSForegroundColorAttributeName: c_pron_lbl,
+                    NSParagraphStyleAttributeName: para,
+                    NSLinkAttributeName: audio_url,
+                }
+                _append(mas, "🔊 ", spk_attrs)
             if lbl:
-                _append(mas, lbl + " ",
-                        _attrs(f_pron_lbl, c_pron_lbl, _para(line=3)))
-            _append(mas, f"/{ipa}/  ",
-                    _attrs(f_pron, c_pron, _para(line=3)))
+                lbl_a = _attrs(f_pron_lbl, c_pron_lbl, para)
+                if audio_url:
+                    lbl_a = dict(lbl_a)
+                    lbl_a[NSLinkAttributeName] = audio_url
+                _append(mas, lbl + " ", lbl_a)
+            ipa_a = _attrs(f_pron, c_pron, para)
+            if audio_url:
+                ipa_a = dict(ipa_a)
+                ipa_a[NSLinkAttributeName] = audio_url
+            _append(mas, f"/{ipa}/  ", ipa_a)
         _append(mas, "\n", _attrs(f_pron, c_pron, _para(after=14)))
 
     # ── Entries ──────────────────────────────────────────────────────────────
@@ -120,7 +137,7 @@ def build_attributed_string(data: dict) -> NSMutableAttributedString:
         _sep_ps.setParagraphSpacingBefore_(14.0 if i == 0 else 20.0)
         _sep_ps.setParagraphSpacing_(12.0)
         _sep_ps.setLineBreakMode_(2)   # NSLineBreakByClipping
-        _sep_ps.setTailIndent_(-32.0)  # 右侧留边距（含滚动条宽度）
+        _sep_ps.setTailIndent_(-50.0)  # 右侧留边距（含滚动条宽度）
         _append(mas, "─" * 120 + "\n",
                 {
                     NSFontAttributeName: NSFont.boldSystemFontOfSize_(10),
@@ -205,6 +222,12 @@ def build_attributed_string(data: dict) -> NSMutableAttributedString:
 
 # ── Widget factory ────────────────────────────────────────────────────────────
 
+class _WordTextView(NSTextView):
+    """NSTextView that suppresses the link URL tooltip on hover."""
+    def setToolTip_(self, tooltip):
+        pass  # block dynamic tooltip set by NSTextView's link tracking
+
+
 def make_word_scroll_view(frame) -> tuple:
     """Returns (scroll_view, text_view)."""
     scroll = NSScrollView.alloc().initWithFrame_(frame)
@@ -213,11 +236,14 @@ def make_word_scroll_view(frame) -> tuple:
     scroll.setAutohidesScrollers_(True)
     scroll.setBorderType_(0)
 
-    tv = NSTextView.alloc().initWithFrame_(frame)
+    tv = _WordTextView.alloc().initWithFrame_(frame)
     tv.setEditable_(False)
     tv.setSelectable_(True)
     tv.setDrawsBackground_(False)
     tv.setTextContainerInset_((16, 20))
+    tv.setLinkTextAttributes_({
+        NSForegroundColorAttributeName: NSColor.secondaryLabelColor(),
+    })
     tv.textContainer().setWidthTracksTextView_(True)
     tv.textContainer().setHeightTracksTextView_(False)
     tv.setAutoresizingMask_(2)

@@ -170,6 +170,7 @@ class FloatPanel(NSObject):
         scroll_h = ch - toolbar_h - 2
         scroll, tv = make_word_scroll_view(NSMakeRect(0, 0, cw, scroll_h))
         scroll.setAutoresizingMask_(2 | 16)
+        tv.setDelegate_(self)
         content.addSubview_(scroll)
 
         self._panel = panel
@@ -226,6 +227,34 @@ class FloatPanel(NSObject):
     @objc.python_method
     def hide(self):
         self._panel.orderOut_(None)
+
+    # ── NSTextViewDelegate — pronunciation link clicks ─────────────────────────
+
+    def textView_clickedOnLink_atIndex_(self, tv, link, char_index):
+        url = str(link)
+        if url.startswith("http"):
+            self._playAudio_(url)
+            return True
+        return False
+
+    @objc.python_method
+    def _playAudio_(self, url: str):
+        if not url:
+            return
+        import threading, subprocess, tempfile, os, urllib.request
+        def _run():
+            try:
+                req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+                with urllib.request.urlopen(req, timeout=10) as r:
+                    data = r.read()
+                with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as f:
+                    f.write(data)
+                    tmp = f.name
+                subprocess.run(["afplay", tmp], check=False)
+                os.unlink(tmp)
+            except Exception as e:
+                print(f"[Audio] {e}")
+        threading.Thread(target=_run, daemon=True).start()
 
     # ── Actions ───────────────────────────────────────────────────────────────
 
