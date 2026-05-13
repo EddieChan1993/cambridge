@@ -790,6 +790,7 @@ class MainWindowController(NSObject):
     def showWindow(self):
         if not getattr(self, "_first_shown", False):
             self._first_shown = True
+            self._resetToWelcome()
             if (self._delegate and hasattr(self._delegate, "settings")
                     and self._delegate.settings.sidebar_open_on_start):
                 self.toggleSidebar_(None)
