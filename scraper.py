@@ -187,9 +187,11 @@ def scrape_cambridge(word: str, base_url: str = "") -> dict:
             examples = []
             for ex_el in db.select(".examp.dexamp")[:3]:
                 eg = ex_el.select_one(".eg.deg") or ex_el.select_one(".eg")
-                if eg:
-                    ex_trans = ex_el.select_one(".trans.dtrans") or ex_el.select_one(".trans")
-                    examples.append({"en": _text(eg), "zh": _text(ex_trans) if ex_trans else ""})
+                en_text = _text(eg) if eg else ""
+                if not en_text:
+                    continue
+                ex_trans = ex_el.select_one(".trans.dtrans") or ex_el.select_one(".trans")
+                examples.append({"en": en_text, "zh": _text(ex_trans) if ex_trans else ""})
 
             if en or zh:
                 definitions.append({
