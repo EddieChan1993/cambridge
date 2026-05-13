@@ -1,203 +1,151 @@
 """
-Global hotkey via Carbon RegisterEventHotKey (ctypes).
-No Accessibility / Input Monitoring permission required.
+Global hotkey monitor — CGEventTap with NSEvent global monitor fallback.
+Plain Python class (no NSObject) to avoid PyObjC init-method pitfalls.
+Initialization is deferred via run_on_main_thread so the run loop is ready.
 """
 
-import ctypes
-import ctypes.util
+import Quartz
+from AppKit import NSEvent, NSEventMaskKeyDown
 
-# confirm module is loaded
-with open("/tmp/hotdict_init.log", "w") as _f:
-    _f.write("hotkey_monitor imported\n")
-
-# ── Carbon ctypes bindings ────────────────────────────────────────────────────
-
-_carbon = ctypes.CDLL(ctypes.util.find_library("Carbon"))
-
-# Carbon modifier masks (different from CGEvent masks)
-_CARBON_MODS = {
-    "cmd":   0x0100,
-    "shift": 0x0200,
-    "alt":   0x0800,
-    "ctrl":  0x1000,
-}
-
-kEventClassKeyboard  = 0x6B657973   # 'keys'
-kEventHotKeyPressed  = 5
-kEventParamDirectObject = 0x2D2D2D2D  # '----'
-typeEventHotKeyID    = 0x686B6579   # 'hkey'
-_HK_SIGNATURE        = 0x48444B59   # 'HDKY'
-noErr                = 0
-
-
-class _EventHotKeyID(ctypes.Structure):
-    _fields_ = [("signature", ctypes.c_uint32), ("id", ctypes.c_uint32)]
-
-
-class _EventTypeSpec(ctypes.Structure):
-    _fields_ = [("eventClass", ctypes.c_uint32), ("eventKind", ctypes.c_uint32)]
-
-
-_HandlerProc = ctypes.CFUNCTYPE(
-    ctypes.c_int32,    # OSStatus
-    ctypes.c_void_p,   # EventHandlerCallRef
-    ctypes.c_void_p,   # EventRef
-    ctypes.c_void_p,   # userData
-)
-
-# Explicit argtypes so ctypes passes structures correctly (by value vs by pointer)
-_carbon.GetApplicationEventTarget.restype  = ctypes.c_void_p
-_carbon.GetApplicationEventTarget.argtypes = []
-
-_carbon.InstallEventHandler.restype  = ctypes.c_int32
-_carbon.InstallEventHandler.argtypes = [
-    ctypes.c_void_p,                    # inTarget
-    ctypes.c_void_p,                    # inHandler (function ptr)
-    ctypes.c_uint32,                    # inNumTypes
-    ctypes.POINTER(_EventTypeSpec),     # inList
-    ctypes.c_void_p,                    # inUserData
-    ctypes.c_void_p,                    # outRef (can be NULL)
-]
-
-_carbon.RegisterEventHotKey.restype  = ctypes.c_int32
-_carbon.RegisterEventHotKey.argtypes = [
-    ctypes.c_uint32,                    # inHotKeyCode
-    ctypes.c_uint32,                    # inHotKeyModifiers
-    _EventHotKeyID,                     # inHotKeyID  (passed by value)
-    ctypes.c_void_p,                    # inTarget
-    ctypes.c_uint32,                    # inOptions
-    ctypes.POINTER(ctypes.c_void_p),    # outRef
-]
-
-_carbon.UnregisterEventHotKey.restype  = ctypes.c_int32
-_carbon.UnregisterEventHotKey.argtypes = [ctypes.c_void_p]
-
-_carbon.GetEventParameter.restype  = ctypes.c_int32
-_carbon.GetEventParameter.argtypes = [
-    ctypes.c_void_p,   # inEvent
-    ctypes.c_uint32,   # inName
-    ctypes.c_uint32,   # inDesiredType
-    ctypes.c_void_p,   # outActualType (NULL ok)
-    ctypes.c_size_t,   # inBufferSize
-    ctypes.c_void_p,   # outActualSize (NULL ok)
-    ctypes.c_void_p,   # outData
-]
-
-# ── Module-level handler (one handler for all registered hotkeys) ─────────────
-
-_registry: dict[int, "HotkeyMonitor"] = {}
-_handler_installed = False
-
-
-def _on_hotkey(call_ref, event_ref, user_data):
-    with open("/tmp/hotdict_hotkey.log", "a") as f:
-        f.write("_on_hotkey called\n")
-    hkid = _EventHotKeyID()
-    _carbon.GetEventParameter(
-        event_ref,
-        kEventParamDirectObject,
-        typeEventHotKeyID,
-        None,
-        ctypes.sizeof(hkid),
-        None,
-        ctypes.byref(hkid),
-    )
-    monitor = _registry.get(hkid.id)
-    with open("/tmp/hotdict_hotkey.log", "a") as f:
-        f.write(f"hkid={hkid.id} monitor={monitor}\n")
-    if monitor is not None:
-        monitor._fire()
-    return noErr
-
+# ── Debug log ─────────────────────────────────────────────────────────────────
 
 def _log(msg):
     with open("/tmp/hotdict_init.log", "a") as f:
         f.write(msg + "\n")
 
+with open("/tmp/hotdict_init.log", "w") as _f:
+    _f.write("hotkey_monitor imported\n")
 
-def _ensure_handler():
-    global _handler_installed
-    if _handler_installed:
-        return
+# ── Modifier maps ─────────────────────────────────────────────────────────────
 
-    target = _carbon.GetApplicationEventTarget()
-    _log(f"GetApplicationEventTarget → {target}")
-    if not target:
-        _log("ERROR: target is NULL, aborting")
-        return
+_QUARTZ_MODS = {
+    "cmd":   Quartz.kCGEventFlagMaskCommand,
+    "shift": Quartz.kCGEventFlagMaskShift,
+    "alt":   Quartz.kCGEventFlagMaskAlternate,
+    "ctrl":  Quartz.kCGEventFlagMaskControl,
+}
 
-    spec = _EventTypeSpec(kEventClassKeyboard, kEventHotKeyPressed)
-    cb   = _HandlerProc(_on_hotkey)
-    _ensure_handler._cb = cb   # keep Python ref so GC won't collect the callback
-
-    status = _carbon.InstallEventHandler(
-        target,
-        cb,
-        ctypes.c_uint32(1),
-        ctypes.byref(spec),
-        None,
-        None,
-    )
-    _log(f"InstallEventHandler → status={status}")
-    if status == noErr:
-        _handler_installed = True
-    else:
-        _log(f"ERROR: InstallEventHandler failed status={status}")
-
-
-# ── Public class (same interface as before) ───────────────────────────────────
-
-_next_id = 1
+_NS_MODS = {
+    "cmd":   0x100000,
+    "shift": 0x020000,
+    "alt":   0x080000,
+    "ctrl":  0x040000,
+}
 
 
 class HotkeyMonitor:
 
     def __init__(self, delegate, keycode, modifiers):
-        global _next_id
         self._delegate   = delegate
         self._keycode    = int(keycode)
-        self._modifiers  = list(modifiers)
-        self._hk_id      = _next_id
-        _next_id        += 1
-        self._ref        = ctypes.c_void_p()
-        self._registered = False
-        _log(f"init kc={keycode} mods={modifiers}")
-        self._register()
+        self._modifiers  = set(modifiers)
+        self._tap        = None
+        self._tap_cb     = None   # GC anchor for CGEventTap callback
+        self._tap_src    = None   # GC anchor for CFRunLoopSource
+        self._ns_handler = None   # GC anchor for NSEvent handler
+        self._monitor    = None
+
+        _log(f"init kc={keycode} mods={list(modifiers)}")
+
+        # Defer until run loop is running
+        from utils import run_on_main_thread
+        monitor = self
+        run_on_main_thread(lambda: monitor._start())
 
     def stop(self):
-        if self._registered:
-            _carbon.UnregisterEventHotKey(self._ref)
-            _registry.pop(self._hk_id, None)
-            self._registered = False
+        if self._tap:
+            Quartz.CGEventTapEnable(self._tap, False)
+            self._tap = None
+        if self._monitor:
+            NSEvent.removeMonitor_(self._monitor)
+            self._monitor = None
 
-    def _register(self):
-        _ensure_handler()
-        if not _handler_installed:
-            print("[HotkeyMonitor] handler not ready, hotkey skipped")
-            return
+    # ── Internal ──────────────────────────────────────────────────────────────
 
-        mod_mask = ctypes.c_uint32(
-            sum(_CARBON_MODS.get(m, 0) for m in self._modifiers))
-        hkid   = _EventHotKeyID(signature=_HK_SIGNATURE, id=self._hk_id)
-        target = _carbon.GetApplicationEventTarget()
+    def _start(self):
+        _log(f"_start kc={self._keycode} mods={self._modifiers}")
+        if not self._try_event_tap():
+            _log("CGEventTap unavailable, falling back to NSEvent monitor")
+            self._try_ns_monitor()
 
-        status = _carbon.RegisterEventHotKey(
-            ctypes.c_uint32(self._keycode),
-            mod_mask,
-            hkid,
-            target,
-            ctypes.c_uint32(0),
-            ctypes.byref(self._ref),
-        )
-        _log(f"RegisterEventHotKey kc={self._keycode} mods={self._modifiers} → status={status} ref={self._ref}")
-        if status == noErr:
-            _registry[self._hk_id] = self
-            self._registered = True
-        else:
-            _log(f"ERROR: RegisterEventHotKey failed")
+    def _matches(self, keycode: int, flags: int) -> bool:
+        if keycode != self._keycode:
+            return False
+        for mod, mask in _QUARTZ_MODS.items():
+            if bool(flags & mask) != (mod in self._modifiers):
+                return False
+        return True
+
+    def _try_event_tap(self) -> bool:
+        mon = self
+
+        def _cb(proxy, event_type, event, refcon):
+            try:
+                if event_type in (
+                    Quartz.kCGEventTapDisabledByUserInput,
+                    Quartz.kCGEventTapDisabledByTimeout,
+                ):
+                    if mon._tap:
+                        Quartz.CGEventTapEnable(mon._tap, True)
+                    return event
+                if event_type == Quartz.kCGEventKeyDown:
+                    kc    = Quartz.CGEventGetIntegerValueField(
+                        event, Quartz.kCGKeyboardEventKeycode)
+                    flags = Quartz.CGEventGetFlags(event)
+                    if mon._matches(int(kc), int(flags)):
+                        mon._fire()
+                        return None
+            except Exception as exc:
+                _log(f"tap cb error: {exc}")
+            return event
+
+        try:
+            tap = Quartz.CGEventTapCreate(
+                Quartz.kCGSessionEventTap,
+                Quartz.kCGHeadInsertEventTap,
+                Quartz.kCGEventTapOptionDefault,
+                Quartz.CGEventMaskBit(Quartz.kCGEventKeyDown),
+                _cb,
+                None,
+            )
+            _log(f"CGEventTapCreate → {tap}")
+            if not tap:
+                return False
+            self._tap    = tap
+            self._tap_cb = _cb   # prevent GC
+            src = Quartz.CFMachPortCreateRunLoopSource(None, tap, 0)
+            self._tap_src = src  # prevent GC
+            Quartz.CFRunLoopAddSource(
+                Quartz.CFRunLoopGetMain(), src, Quartz.kCFRunLoopCommonModes)
+            Quartz.CGEventTapEnable(tap, True)
+            return True
+        except Exception as exc:
+            _log(f"CGEventTap exception: {exc}")
+            return False
+
+    def _try_ns_monitor(self):
+        mon = self
+
+        def _handler(event):
+            try:
+                kc       = event.keyCode()
+                raw      = event.modifierFlags()
+                ns_flags = sum(
+                    _QUARTZ_MODS[m] for m, mask in _NS_MODS.items()
+                    if raw & mask
+                )
+                _log(f"NS keydown kc={kc} flags={hex(ns_flags)}")
+                if mon._matches(int(kc), int(ns_flags)):
+                    mon._fire()
+            except Exception as exc:
+                _log(f"NS handler error: {exc}")
+
+        self._ns_handler = _handler   # prevent GC
+        self._monitor = NSEvent.addGlobalMonitorForEventsMatchingMask_handler_(
+            NSEventMaskKeyDown, _handler)
+        _log(f"NSEvent monitor → {self._monitor}")
 
     def _fire(self):
-        with open("/tmp/hotdict_hotkey.log", "a") as f:
-            f.write(f"_fire called delegate={self._delegate}\n")
+        _log("_fire called")
         from utils import run_on_main_thread
         run_on_main_thread(lambda: self._delegate.hotkeyTriggered())
