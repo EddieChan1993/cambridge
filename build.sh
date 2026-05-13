@@ -187,4 +187,12 @@ else
 
     echo "  ──────────────────────────────────────────"
     printf "  \033[32m✅  dist/HotDict.app\033[0m  (drag to /Applications to install)\n\n"
+
+    # Reset TCC permissions so macOS re-prompts for the new binary's signature.
+    # Required because each full build produces a new binary with a different
+    # code signature — previously granted Accessibility/Input Monitoring permissions
+    # are silently invalidated and must be re-granted after every build.
+    tccutil reset Accessibility com.local.hotdict 2>/dev/null || true
+    tccutil reset ListenEvent   com.local.hotdict 2>/dev/null || true
+    printf "  \033[33m⚠️  权限已重置\033[0m — 启动 App 后请重新授予「辅助功能」权限，快捷键才能生效\n\n"
 fi
