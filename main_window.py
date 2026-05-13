@@ -233,6 +233,7 @@ class MainWindowController(NSObject):
         self._ov_hint        = None
         self._table        = None
         self._seg          = None
+        self._stat_label   = None
         self._clear_btn    = None
         self._export_btn   = None
         self._search_field = None
@@ -291,9 +292,21 @@ class MainWindowController(NSObject):
         left.addSubview_(sep_top)
 
         # Word list scroll + table — fills between top and bottom areas
-        _BTN_H = 36     # height reserved at bottom for action buttons
+        _BTN_H  = 36    # height reserved at bottom for action buttons
+        _STAT_H = 20    # stat label height above button area
+        stat_label = NSTextField.alloc().initWithFrame_(
+            NSMakeRect(0, _BTN_H, LEFT_W, _STAT_H))
+        stat_label.setEditable_(False)
+        stat_label.setBezeled_(False)
+        stat_label.setDrawsBackground_(False)
+        stat_label.setAlignment_(1)   # NSTextAlignmentCenter
+        stat_label.setFont_(NSFont.systemFontOfSize_(10))
+        stat_label.setTextColor_(NSColor.tertiaryLabelColor())
+        stat_label.setAutoresizingMask_(2 | 32)
+        left.addSubview_(stat_label)
+
         list_scroll = NSScrollView.alloc().initWithFrame_(
-            NSMakeRect(0, _BTN_H, LEFT_W, ch - RIGHT_HDR - 1 - _BTN_H))
+            NSMakeRect(0, _BTN_H + _STAT_H, LEFT_W, ch - RIGHT_HDR - 1 - _BTN_H - _STAT_H))
         list_scroll.setHasVerticalScroller_(True)
         list_scroll.setAutohidesScrollers_(True)
         list_scroll.setBorderType_(0)
@@ -479,6 +492,7 @@ class MainWindowController(NSObject):
         self._sidebar_view = left
         self._table        = table
         self._seg          = seg
+        self._stat_label   = stat_label
         self._clear_btn    = clear_btn
         self._export_btn   = export_btn
         self._search_field = search_field
@@ -676,6 +690,13 @@ class MainWindowController(NSObject):
         self._reloading = True
         self._table.reloadData()
         self._reloading = False
+        if self._stat_label:
+            total = len(self._list_data)
+            if self._mode == "history":
+                today = dm.get_today_history_count()
+                self._stat_label.setStringValue_(f"共 {total} 条 · 今日 {today} 条")
+            else:
+                self._stat_label.setStringValue_(f"共 {total} 个收藏")
 
     @objc.python_method
     def refreshHistory(self):

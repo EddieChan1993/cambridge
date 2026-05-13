@@ -77,6 +77,17 @@ class DataManager:
     def get_history(self) -> list:
         return [h["word"] for h in self.history]
 
+    def get_today_history_count(self) -> int:
+        today = datetime.now().date()
+        count = 0
+        for h in self.history:
+            try:
+                if datetime.fromisoformat(h["time"]).date() == today:
+                    count += 1
+            except Exception:
+                pass
+        return count
+
     def clear_cache(self):
         self.cache = {}
         self._save(CACHE_FILE, self.cache)
