@@ -373,17 +373,23 @@ class MainWindowController(NSObject):
         query_btn.setAutoresizingMask_(1 | 8)
         hdr.addSubview_(query_btn)
 
+        _ICON_Y  = (RIGHT_HDR - 36) // 2   # 36px 按钮在 66px header 里垂直居中
+        _ICON_SZ = 36
+        _ICON_F  = NSFont.systemFontOfSize_(18)
+
         fav_btn = _HoverFavButton.alloc().initWithFrame_(
-            NSMakeRect(right_w - 88, 15, 36, 36))
+            NSMakeRect(right_w - 88, _ICON_Y, _ICON_SZ, _ICON_SZ))
+        fav_btn.setFont_(_ICON_F)           # 与 sidebar_btn 字号统一
         fav_btn.setTarget_(self)
         fav_btn.setAction_("toggleFavorite:")
         fav_btn.setAutoresizingMask_(1 | 8)
         fav_btn.setToolTip_("收藏 / 取消收藏")
         hdr.addSubview_(fav_btn)
 
-        sidebar_btn = _HoverFavButton.alloc().initWithFrame_(NSMakeRect(right_w - 44, 15, 36, 36))
+        sidebar_btn = _HoverFavButton.alloc().initWithFrame_(
+            NSMakeRect(right_w - 44, _ICON_Y, _ICON_SZ, _ICON_SZ))
         sidebar_btn.setTitle_("☰")
-        sidebar_btn.setFont_(NSFont.systemFontOfSize_(14))
+        sidebar_btn.setFont_(_ICON_F)       # 与 fav_btn 字号相同
         sidebar_btn.setContentTintColor_(NSColor.secondaryLabelColor())
         sidebar_btn.setToolTip_("显示/隐藏侧边栏")
         sidebar_btn.setTarget_(self)
