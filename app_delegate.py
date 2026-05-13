@@ -175,7 +175,7 @@ class AppDelegate(NSObject):
 
     @objc.python_method
     def _onShowWindowHotkey(self):
-        self.main_window.showWindow()
+        self.main_window.toggleVisible()
 
     # ── 查词流水线 ────────────────────────────────────────────────────────────
 
