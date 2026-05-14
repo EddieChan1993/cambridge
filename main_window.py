@@ -103,7 +103,7 @@ class _HoverFavButton(NSButton):
         self._hovered = False
         self.setBordered_(False)
         self.setButtonType_(NSButtonTypeMomentaryLight)
-        self.setFont_(NSFont.systemFontOfSize_(20))
+        self.setFont_(NSFont.systemFontOfSize_(24))
         self.setTitle_("☆")
         self.setContentTintColor_(NSColor.tertiaryLabelColor())
         opts = 0x01 | 0x80  # NSTrackingMouseEnteredAndExited | NSTrackingActiveAlways
@@ -392,7 +392,7 @@ class MainWindowController(NSObject):
 
         _ICON_Y  = (RIGHT_HDR - 36) // 2   # 36px 按钮在 66px header 里垂直居中
         _ICON_SZ = 36
-        _ICON_F  = NSFont.systemFontOfSize_(18)
+        _ICON_F  = NSFont.systemFontOfSize_(24)
 
         fav_btn = _HoverFavButton.alloc().initWithFrame_(
             NSMakeRect(right_w - 88, _ICON_Y, _ICON_SZ, _ICON_SZ))
