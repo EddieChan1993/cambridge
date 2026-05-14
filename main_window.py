@@ -104,7 +104,7 @@ class _HoverFavButton(NSButton):
         self.setBordered_(False)
         self.setButtonType_(NSButtonTypeMomentaryLight)
         self.setFont_(NSFont.systemFontOfSize_(24))
-        self.setTitle_("☆")
+        self.setTitle_("☆︎")
         self.setContentTintColor_(NSColor.tertiaryLabelColor())
         opts = 0x01 | 0x80  # NSTrackingMouseEnteredAndExited | NSTrackingActiveAlways
         ta = NSTrackingArea.alloc().initWithRect_options_owner_userInfo_(
@@ -679,7 +679,7 @@ class MainWindowController(NSObject):
 
     @objc.python_method
     def _updateFavBtn_(self, is_fav: bool):
-        self._fav_btn.setTitle_("★" if is_fav else "☆")
+        self._fav_btn.setTitle_("★︎" if is_fav else "☆︎")
         color = NSColor.systemYellowColor() if is_fav else NSColor.tertiaryLabelColor()
         self._fav_btn.setContentTintColor_(color)
 
