@@ -139,18 +139,44 @@ def scrape_cambridge(word: str, base_url: str = "") -> dict:
 
     # ── 词条 ──────────────────────────────────────────────────────────────────
     blocks = soup.select(".pr.entry-body__el") or soup.select(".entry-body__el")
+    # Also collect top-level phrase-di-blocks (e.g. "-rich" as "phrase" POS),
+    # which sit alongside entry-body__el in the page's di-body rather than inside one.
+    for pdb in soup.select(".phrase-di-block, .dphrase-di-block"):
+        if not pdb.find_parent(class_="entry-body__el") and \
+           not pdb.find_parent(class_="phrase-block"):
+            blocks = list(blocks) + [pdb]
+
     if not blocks:
         result["error"] = "No dictionary entry found"
         return result
 
     for block in blocks:
-        # Collect all POS labels from the entry header (e.g. "adjective, adverb")
-        pos_header = block.select_one(".pos-header") or block.select_one(".dpos-h")
-        if pos_header:
-            pos_els = pos_header.select(".pos.dpos") or pos_header.select(".pos")
+        block_cls = set(block.get("class") or [])
+        is_phrase_di = bool(block_cls & {"phrase-di-block", "dphrase-di-block"})
+
+        if is_phrase_di:
+            # POS comes from .di-info, not .pos-header
+            di_info = block.select_one(".di-info")
+            pos_els = di_info.select(".pos.dpos") if di_info else []
+            if not pos_els:
+                pos_els = block.select(".di-info .pos")
+            pos = ", ".join(_text(e) for e in pos_els if _text(e))
+            pos_gram = ""
+            source = ""
         else:
-            pos_els = block.select(".pos.dpos") or block.select(".pos")
-        pos = ", ".join(_text(e) for e in pos_els if _text(e))
+            # Collect all POS labels from the entry header (e.g. "adjective, adverb")
+            pos_header = block.select_one(".pos-header") or block.select_one(".dpos-h")
+            if pos_header:
+                pos_els = pos_header.select(".pos.dpos") or pos_header.select(".pos")
+            else:
+                pos_els = block.select(".pos.dpos") or block.select(".pos")
+            pos = ", ".join(_text(e) for e in pos_els if _text(e))
+            # Entry-level grammar note e.g. "[ C or U ]"
+            if pos_header:
+                eg = pos_header.select_one(".gram.dgram") or pos_header.select_one(".gram")
+                pos_gram = _text(eg) if eg else ""
+            else:
+                pos_gram = ""
 
         # Source dictionary name from ancestor superentry/dictionary header
         source = ""
@@ -165,13 +191,6 @@ def scrape_cambridge(word: str, base_url: str = "") -> dict:
                         source = raw.split("|", 1)[1].strip()
                 break
             ancestor = ancestor.parent
-
-        # Entry-level grammar note e.g. "[ C or U ]"
-        if pos_header:
-            eg = pos_header.select_one(".gram.dgram") or pos_header.select_one(".gram")
-            pos_gram = _text(eg) if eg else ""
-        else:
-            pos_gram = ""
 
         def _parse_phrase_block(pb):
             title_el    = pb.select_one(".phrase-title")
@@ -211,7 +230,34 @@ def scrape_cambridge(word: str, base_url: str = "") -> dict:
 
         # Iterate dsense blocks so phrases are associated with their parent sense
         definitions = []
-        dsense_blocks = block.select(".dsense")
+        # For phrase-di-block entries, defs live directly in .phrase-di-body
+        if is_phrase_di:
+            search_root = block.select_one(".phrase-di-body") or block
+            for db in search_root.select(".ddef_block"):
+                def_el = db.select_one(".def.ddef_d") or db.select_one(".def")
+                en = _text(def_el).rstrip(":")
+                zh = _def_trans(db)
+                gram_el = db.select_one(".gram.dgram")
+                gram    = _text(gram_el) if gram_el else ""
+                lab_el  = db.select_one(".lab.dlab")
+                label   = _text(lab_el) if lab_el else ""
+                gc_el   = db.select_one(".usage.dusage")
+                usage   = _text(gc_el) if gc_el else ""
+                examples = []
+                for ex_el in db.select(".examp.dexamp")[:3]:
+                    eg = ex_el.select_one(".eg.deg") or ex_el.select_one(".eg")
+                    en_text = _text(eg) if eg else ""
+                    if not en_text:
+                        continue
+                    ex_trans = ex_el.select_one(".trans.dtrans") or ex_el.select_one(".trans")
+                    examples.append({"en": en_text, "zh": _text(ex_trans) if ex_trans else ""})
+                if en or zh:
+                    definitions.append({
+                        "en": en, "zh": zh,
+                        "gram": gram, "label": label, "usage": usage,
+                        "guideword": "", "examples": examples, "phrases": [],
+                    })
+        dsense_blocks = ([] if is_phrase_di else block.select(".dsense"))
         if dsense_blocks:
             for ds in dsense_blocks:
                 gw_el     = ds.select_one(".guideword.dsense_gw") or ds.select_one(".guideword")
@@ -278,7 +324,7 @@ def scrape_cambridge(word: str, base_url: str = "") -> dict:
                                 }
                                 definitions.append(standalone)
                                 last_def = standalone
-        else:
+        elif not is_phrase_di:
             # Fallback: no dsense grouping — collect ddef_blocks directly
             for db in block.select(".ddef_block"):
                 if db.find_parent(class_="phrase-block"):
