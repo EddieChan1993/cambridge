@@ -137,32 +137,57 @@ def build_attributed_string(data: dict, font_size: int = 14) -> NSMutableAttribu
     c_phrase_g = NSColor.secondaryLabelColor()
 
     f_xref_hdr  = NSFont.boldSystemFontOfSize_(_sz(11))
-    f_xref_word = NSFont.systemFontOfSize_(_sz(11))
-    c_xref_hdr  = NSColor.tertiaryLabelColor()
+    f_xref_word = NSFont.systemFontOfSize_(_sz(12))
+    # Light blue background matching Cambridge's thesaurus box
+    c_xref_bg   = NSColor.colorWithRed_green_blue_alpha_(0.78, 0.87, 0.97, 1.0)
+    c_xref_hdr  = NSColor.colorWithWhite_alpha_(0.15, 1.0)
     c_xref_word = NSColor.secondaryLabelColor()
 
     def _render_xrefs(synonyms, antonyms, h_indent):
-        """Render synonym/antonym lines after examples."""
+        """Render synonym/antonym sections after examples."""
         for section_label, words in [("同义词", synonyms), ("反义词", antonyms)]:
             if not words:
                 continue
-            hdr_para = _para(line=2, before=6, after=0, head=h_indent, first=h_indent)
-            _append(mas, section_label + "\n",
-                    _attrs(f_xref_hdr, c_xref_hdr, hdr_para))
+            # Full-width header row with blue background
+            hdr_ps = NSMutableParagraphStyle.alloc().init()
+            hdr_ps.setParagraphSpacingBefore_(8.0)
+            hdr_ps.setParagraphSpacing_(0.0)
+            hdr_ps.setLineSpacing_(2.0)
+            hdr_ps.setHeadIndent_(h_indent)
+            hdr_ps.setFirstLineHeadIndent_(h_indent)
+            hdr_ps.setTailIndent_(-50.0)
+            _append(mas, " " + section_label + " " * 80 + "\n",
+                    {NSFontAttributeName: f_xref_hdr,
+                     NSForegroundColorAttributeName: c_xref_hdr,
+                     NSBackgroundColorAttributeName: c_xref_bg,
+                     NSParagraphStyleAttributeName: hdr_ps})
             for w in words:
                 word_str = w.get("word", "")
                 guide    = w.get("guide", "")
                 lbl      = w.get("label", "")
-                line_para = _para(line=2, before=1, after=0,
+                if not word_str:
+                    continue
+                word_para = _para(line=2, before=3, after=3,
                                   head=h_indent + 12, first=h_indent + 12)
-                parts = word_str
+                display = word_str
+                suffix_parts = []
                 if guide:
-                    parts += f"  ({guide})"
+                    suffix_parts.append(f"({guide})")
                 if lbl:
-                    parts += f"  {lbl}"
-                _append(mas, parts + "\n", _attrs(f_xref_word, c_xref_word, line_para))
-            _append(mas, "\n", _attrs(f_xref_word, c_xref_word,
-                                      _para(line=0, before=0, after=0)))
+                    suffix_parts.append(lbl)
+                lookup_url = f"lookup://{word_str}"
+                word_attrs = {
+                    NSFontAttributeName: f_xref_word,
+                    NSForegroundColorAttributeName: c_xref_word,
+                    NSParagraphStyleAttributeName: word_para,
+                    NSLinkAttributeName: lookup_url,
+                }
+                _append(mas, display, word_attrs)
+                if suffix_parts:
+                    suf_attrs = _attrs(NSFont.systemFontOfSize_(_sz(10)),
+                                       c_xref_word, word_para)
+                    _append(mas, "  " + "  ".join(suffix_parts), suf_attrs)
+                _append(mas, "\n", _attrs(f_xref_word, c_xref_word, word_para))
 
     def _render_one_def(defn, num=None, base_indent=0):
         """Render a single definition. num=None means no numbering."""

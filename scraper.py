@@ -164,13 +164,24 @@ def scrape_cambridge(word: str, base_url: str = "") -> dict:
             break
 
     # ── 词条 ──────────────────────────────────────────────────────────────────
-    blocks = soup.select(".pr.entry-body__el") or soup.select(".entry-body__el")
-    # Also collect top-level phrase-di-blocks (e.g. "-rich" as "phrase" POS),
-    # which sit alongside entry-body__el in the page's di-body rather than inside one.
-    for pdb in soup.select(".phrase-di-block, .dphrase-di-block"):
-        if not pdb.find_parent(class_="entry-body__el") and \
-           not pdb.find_parent(class_="phrase-block"):
-            blocks = list(blocks) + [pdb]
+    # Collect entry-body__el and top-level phrase-di-blocks in DOM order.
+    # phrase-di-blocks sit directly in di-body alongside .entry containers,
+    # so we walk the superentry structure to preserve the page's interleaving.
+    blocks = []
+    for di_body in soup.select(".pr.di.superentry .di-body, .di.superentry .di-body"):
+        for child in di_body.children:
+            if not hasattr(child, "get"):
+                continue
+            child_cls = set(child.get("class") or [])
+            if child_cls & {"phrase-di-block", "dphrase-di-block"}:
+                blocks.append(child)
+            elif "entry" in child_cls:
+                for el in (child.select(".pr.entry-body__el") or
+                           child.select(".entry-body__el")):
+                    blocks.append(el)
+    if not blocks:
+        # Fallback for pages without superentry wrapper
+        blocks = soup.select(".pr.entry-body__el") or soup.select(".entry-body__el")
 
     if not blocks:
         result["error"] = "No dictionary entry found"

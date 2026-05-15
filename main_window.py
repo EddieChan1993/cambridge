@@ -797,6 +797,12 @@ class MainWindowController(NSObject):
         if url.startswith("http"):
             self._playAudio_(url)
             return True
+        if url.startswith("lookup://"):
+            word = url[len("lookup://"):]
+            if word and self._delegate:
+                self._search_field.setStringValue_(word)
+                self._delegate.lookupWordInMainWindow_(word)
+            return True
         return False
 
     # ── 发音播放 ──────────────────────────────────────────────────────────────
