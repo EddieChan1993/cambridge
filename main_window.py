@@ -63,6 +63,16 @@ class _Cell(NSTextField):
         return self
 
 
+class _VScrollView(NSScrollView):
+    """NSScrollView that blocks horizontal scrolling."""
+
+    def scrollWheel_(self, event):
+        if abs(event.scrollingDeltaY()) >= abs(event.scrollingDeltaX()):
+            objc.super(_VScrollView, self).scrollWheel_(event)
+        else:
+            self.nextResponder().scrollWheel_(event)
+
+
 class _WordTable(NSTableView):
     """NSTableView with right-click delete menu."""
 
@@ -309,9 +319,10 @@ class MainWindowController(NSObject):
         stat_label.setAutoresizingMask_(2 | 32)
         left.addSubview_(stat_label)
 
-        list_scroll = NSScrollView.alloc().initWithFrame_(
+        list_scroll = _VScrollView.alloc().initWithFrame_(
             NSMakeRect(0, _BTN_H + _STAT_H, LEFT_W, ch - RIGHT_HDR - 1 - _BTN_H - _STAT_H))
         list_scroll.setHasVerticalScroller_(True)
+        list_scroll.setHasHorizontalScroller_(False)
         list_scroll.setAutohidesScrollers_(True)
         list_scroll.setBorderType_(0)
         list_scroll.setAutoresizingMask_(2 | 16)
