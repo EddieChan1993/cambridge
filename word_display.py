@@ -136,6 +136,34 @@ def build_attributed_string(data: dict, font_size: int = 14) -> NSMutableAttribu
     c_phrase   = NSColor.labelColor()
     c_phrase_g = NSColor.secondaryLabelColor()
 
+    f_xref_hdr  = NSFont.boldSystemFontOfSize_(_sz(11))
+    f_xref_word = NSFont.systemFontOfSize_(_sz(11))
+    c_xref_hdr  = NSColor.tertiaryLabelColor()
+    c_xref_word = NSColor.secondaryLabelColor()
+
+    def _render_xrefs(synonyms, antonyms, h_indent):
+        """Render synonym/antonym lines after examples."""
+        for section_label, words in [("同义词", synonyms), ("反义词", antonyms)]:
+            if not words:
+                continue
+            hdr_para = _para(line=2, before=6, after=0, head=h_indent, first=h_indent)
+            _append(mas, section_label + "\n",
+                    _attrs(f_xref_hdr, c_xref_hdr, hdr_para))
+            for w in words:
+                word_str = w.get("word", "")
+                guide    = w.get("guide", "")
+                lbl      = w.get("label", "")
+                line_para = _para(line=2, before=1, after=0,
+                                  head=h_indent + 12, first=h_indent + 12)
+                parts = word_str
+                if guide:
+                    parts += f"  ({guide})"
+                if lbl:
+                    parts += f"  {lbl}"
+                _append(mas, parts + "\n", _attrs(f_xref_word, c_xref_word, line_para))
+            _append(mas, "\n", _attrs(f_xref_word, c_xref_word,
+                                      _para(line=0, before=0, after=0)))
+
     def _render_one_def(defn, num=None, base_indent=0):
         """Render a single definition. num=None means no numbering."""
         en        = defn.get("en", "")
@@ -145,6 +173,8 @@ def build_attributed_string(data: dict, font_size: int = 14) -> NSMutableAttribu
         usage     = defn.get("usage", "")
         guideword = defn.get("guideword", "")
         exs       = defn.get("examples", [])
+        synonyms  = defn.get("synonyms", [])
+        antonyms  = defn.get("antonyms", [])
 
         h_indent = base_indent if num is None else base_indent + INDENT
         def_para = _para(line=3, before=6 if num and num > 1 else 0,
@@ -181,6 +211,9 @@ def build_attributed_string(data: dict, font_size: int = 14) -> NSMutableAttribu
                 ez_para = _para(line=2, after=3,
                                 head=h_indent + 16, first=h_indent + 16)
                 _append(mas, ex_zh + "\n", _attrs(f_ex_zh, c_ex_zh, ez_para))
+
+        if synonyms or antonyms:
+            _render_xrefs(synonyms, antonyms, h_indent)
 
     def _render_defs(defs, base_indent=0):
         single = len(defs) == 1

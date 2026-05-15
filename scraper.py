@@ -38,6 +38,32 @@ def _def_trans(db) -> str:
     return ""
 
 
+def _parse_xrefs(db) -> dict:
+    """Extract synonym/antonym lists from a ddef_block. Returns {"synonyms": [...], "antonyms": [...]}."""
+    synonyms, antonyms = [], []
+    for xref in db.select(".xref"):
+        cls = set(xref.get("class") or [])
+        if cls & {"synonym", "synonyms"}:
+            target = synonyms
+        elif "opposite" in cls:
+            target = antonyms
+        else:
+            continue
+        for item in xref.select(".item"):
+            # Word can be in .x-h (single word) or .x-p (phrase like "the poor")
+            word_el = item.select_one(".x-h.dx-h") or item.select_one(".x-p.dx-p")
+            if not word_el:
+                continue
+            word = re.sub(r"\s+", " ", word_el.get_text(separator=" ")).strip()
+            guide_el = item.select_one(".x-num.dx-num")
+            guide = guide_el.get_text(strip=True).strip("()") if guide_el else ""
+            label_el = item.select_one(".x-lab.dx-lab")
+            label = label_el.get_text(strip=True) if label_el else ""
+            if word:
+                target.append({"word": word, "guide": guide, "label": label})
+    return {"synonyms": synonyms, "antonyms": antonyms}
+
+
 def _text(el, sep=" ") -> str:
     """Extract clean text, preserving word boundaries and fixing punctuation spacing."""
     if not el:
@@ -220,9 +246,12 @@ def scrape_cambridge(word: str, base_url: str = "") -> dict:
                     ex_trans = ex_el.select_one(".trans.dtrans") or ex_el.select_one(".trans")
                     examples.append({"en": en_text, "zh": _text(ex_trans) if ex_trans else ""})
                 if en or zh:
+                    xrefs = _parse_xrefs(db)
                     ph_defs.append({"en": en, "zh": zh, "gram": gram2,
                                     "label": label2, "usage": usage2,
-                                    "examples": examples})
+                                    "examples": examples,
+                                    "synonyms": xrefs["synonyms"],
+                                    "antonyms": xrefs["antonyms"]})
             if not ph_defs:
                 return None
             return {"phrase": phrase_txt, "gram": phrase_gram,
@@ -252,10 +281,12 @@ def scrape_cambridge(word: str, base_url: str = "") -> dict:
                     ex_trans = ex_el.select_one(".trans.dtrans") or ex_el.select_one(".trans")
                     examples.append({"en": en_text, "zh": _text(ex_trans) if ex_trans else ""})
                 if en or zh:
+                    xrefs = _parse_xrefs(db)
                     definitions.append({
                         "en": en, "zh": zh,
                         "gram": gram, "label": label, "usage": usage,
                         "guideword": "", "examples": examples, "phrases": [],
+                        "synonyms": xrefs["synonyms"], "antonyms": xrefs["antonyms"],
                     })
         dsense_blocks = ([] if is_phrase_di else block.select(".dsense"))
         if dsense_blocks:
@@ -299,12 +330,15 @@ def scrape_cambridge(word: str, base_url: str = "") -> dict:
                             examples.append({"en": en_text,
                                              "zh": _text(ex_trans) if ex_trans else ""})
                         if en or zh:
+                            xrefs = _parse_xrefs(db)
                             last_def = {
                                 "en": en, "zh": zh,
                                 "gram": gram, "label": label, "usage": usage,
                                 "guideword": guideword,
                                 "examples": examples,
                                 "phrases": [],
+                                "synonyms": xrefs["synonyms"],
+                                "antonyms": xrefs["antonyms"],
                             }
                             definitions.append(last_def)
 
@@ -350,10 +384,12 @@ def scrape_cambridge(word: str, base_url: str = "") -> dict:
                     ex_trans = ex_el.select_one(".trans.dtrans") or ex_el.select_one(".trans")
                     examples.append({"en": en_text, "zh": _text(ex_trans) if ex_trans else ""})
                 if en or zh:
+                    xrefs = _parse_xrefs(db)
                     definitions.append({
                         "en": en, "zh": zh,
                         "gram": gram, "label": label, "usage": usage,
                         "examples": examples, "phrases": [],
+                        "synonyms": xrefs["synonyms"], "antonyms": xrefs["antonyms"],
                     })
 
         if pos or definitions:
