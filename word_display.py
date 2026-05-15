@@ -87,8 +87,8 @@ def build_attributed_string(data: dict, font_size: int = 14) -> NSMutableAttribu
     c_en       = NSColor.labelColor()             # bold black/dark — definition
     c_note     = NSColor.secondaryLabelColor()    # inline gram/label note
     c_zh       = NSColor.secondaryLabelColor()    # Chinese definition
-    c_ex_en    = NSColor.secondaryLabelColor()    # example sentence
-    c_ex_zh    = NSColor.tertiaryLabelColor()     # example Chinese
+    c_ex_en    = NSColor.labelColor()              # example sentence
+    c_ex_zh    = NSColor.secondaryLabelColor()    # example Chinese
     c_bullet   = NSColor.systemBlueColor()        # example bullet (distinct color)
     c_err      = NSColor.systemRedColor()
 
