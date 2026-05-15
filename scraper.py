@@ -219,42 +219,53 @@ def scrape_cambridge(word: str, base_url: str = "") -> dict:
                 # Strip surrounding parens: "( POSITION )" → "POSITION"
                 guideword = re.sub(r"^\(\s*|\s*\)$", "", guideword).strip()
 
-                # Phrases belong to the whole dsense — attach only to the last def
-                phrases = [p for pb in ds.select(".phrase-block")
-                           if (p := _parse_phrase_block(pb)) is not None]
+                # Walk sense-body children in DOM order so each phrase-block
+                # is attached to the definition that immediately precedes it.
+                sense_body = ds.select_one(".sense-body") or ds
+                last_def = None
+                for child in sense_body.children:
+                    if not hasattr(child, "get"):
+                        continue
+                    child_cls = set(child.get("class") or [])
 
-                ds_defs = [db for db in ds.select(".ddef_block")
-                           if not db.find_parent(class_="phrase-block")]
+                    if "ddef_block" in child_cls or "def-block" in child_cls:
+                        db = child
+                        if db.find_parent(class_="phrase-block"):
+                            continue
+                        def_el = db.select_one(".def.ddef_d") or db.select_one(".def")
+                        en = _text(def_el).rstrip(":")
+                        zh = _def_trans(db)
+                        gram_el = db.select_one(".gram.dgram")
+                        gram    = _text(gram_el) if gram_el else ""
+                        lab_el  = db.select_one(".lab.dlab")
+                        label   = _text(lab_el) if lab_el else ""
+                        gc_el   = db.select_one(".usage.dusage")
+                        usage   = _text(gc_el) if gc_el else ""
+                        examples = []
+                        for ex_el in db.select(".examp.dexamp")[:3]:
+                            if ex_el.find_parent(class_="phrase-block"):
+                                continue
+                            eg = ex_el.select_one(".eg.deg") or ex_el.select_one(".eg")
+                            en_text = _text(eg) if eg else ""
+                            if not en_text:
+                                continue
+                            ex_trans = ex_el.select_one(".trans.dtrans") or ex_el.select_one(".trans")
+                            examples.append({"en": en_text,
+                                             "zh": _text(ex_trans) if ex_trans else ""})
+                        if en or zh:
+                            last_def = {
+                                "en": en, "zh": zh,
+                                "gram": gram, "label": label, "usage": usage,
+                                "guideword": guideword,
+                                "examples": examples,
+                                "phrases": [],
+                            }
+                            definitions.append(last_def)
 
-                for k, db in enumerate(ds_defs):
-                    def_el = db.select_one(".def.ddef_d") or db.select_one(".def")
-                    en = _text(def_el).rstrip(":")
-                    zh = _def_trans(db)
-                    gram_el = db.select_one(".gram.dgram")
-                    gram    = _text(gram_el) if gram_el else ""
-                    lab_el  = db.select_one(".lab.dlab")
-                    label   = _text(lab_el) if lab_el else ""
-                    gc_el   = db.select_one(".usage.dusage")
-                    usage   = _text(gc_el) if gc_el else ""
-                    examples = []
-                    for ex_el in db.select(".examp.dexamp")[:3]:
-                        if ex_el.find_parent(class_="phrase-block"):
-                            continue
-                        eg = ex_el.select_one(".eg.deg") or ex_el.select_one(".eg")
-                        en_text = _text(eg) if eg else ""
-                        if not en_text:
-                            continue
-                        ex_trans = ex_el.select_one(".trans.dtrans") or ex_el.select_one(".trans")
-                        examples.append({"en": en_text, "zh": _text(ex_trans) if ex_trans else ""})
-                    if en or zh:
-                        definitions.append({
-                            "en": en, "zh": zh,
-                            "gram": gram, "label": label, "usage": usage,
-                            "guideword": guideword,
-                            "examples": examples,
-                            # phrases only on the last definition of this dsense
-                            "phrases": phrases if k == len(ds_defs) - 1 else [],
-                        })
+                    elif "phrase-block" in child_cls or "dphrase-block" in child_cls:
+                        p = _parse_phrase_block(child)
+                        if p and last_def is not None:
+                            last_def["phrases"].append(p)
         else:
             # Fallback: no dsense grouping — collect ddef_blocks directly
             for db in block.select(".ddef_block"):
