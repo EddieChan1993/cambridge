@@ -182,8 +182,8 @@ def scrape_cambridge(word: str, base_url: str = "") -> dict:
             phrase_gram = _text(gram_el) if gram_el else ""
             cefr_el     = pb.select_one(".epp-xref")
             cefr        = _text(cefr_el) if cefr_el else ""
-            var_el      = pb.select_one(".var.dvar")
-            variant     = _text(var_el) if var_el else ""
+            var_els = pb.select(".phrase-head .var.dvar")
+            variant = "; ".join(_text(v) for v in var_els) if var_els else ""
             ph_defs = []
             for db in pb.select(".ddef_block"):
                 def_el = db.select_one(".def.ddef_d") or db.select_one(".def")
