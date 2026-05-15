@@ -138,18 +138,21 @@ def build_attributed_string(data: dict, font_size: int = 14) -> NSMutableAttribu
 
     def _render_one_def(defn, num=None, base_indent=0):
         """Render a single definition. num=None means no numbering."""
-        en    = defn.get("en", "")
-        zh    = defn.get("zh", "")
-        gram  = defn.get("gram", "")
-        label = defn.get("label", "")
-        usage = defn.get("usage", "")
-        exs   = defn.get("examples", [])
+        en        = defn.get("en", "")
+        zh        = defn.get("zh", "")
+        gram      = defn.get("gram", "")
+        label     = defn.get("label", "")
+        usage     = defn.get("usage", "")
+        guideword = defn.get("guideword", "")
+        exs       = defn.get("examples", [])
 
         h_indent = base_indent if num is None else base_indent + INDENT
         def_para = _para(line=3, before=6 if num and num > 1 else 0,
                          after=2, head=h_indent, first=base_indent)
         if num is not None:
             _append(mas, f"{num}. ", _attrs(f_num, c_num, def_para))
+        if guideword:
+            _append(mas, f"({guideword})  ", _attrs(f_note, c_note, def_para))
         if en:
             _append(mas, en, _attrs(f_en, c_en, def_para))
         note_parts = [p for p in [gram, label] if p]

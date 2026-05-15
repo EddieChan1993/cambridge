@@ -214,6 +214,15 @@ def scrape_cambridge(word: str, base_url: str = "") -> dict:
         dsense_blocks = block.select(".dsense")
         if dsense_blocks:
             for ds in dsense_blocks:
+                gw_el     = ds.select_one(".guideword.dsense_gw") or ds.select_one(".guideword")
+                guideword = _text(gw_el) if gw_el else ""
+                # Strip surrounding parens: "( POSITION )" → "POSITION"
+                guideword = re.sub(r"^\(\s*|\s*\)$", "", guideword).strip()
+
+                # Phrases belonging to this dsense (shared across all defs in the sense)
+                phrases = [p for pb in ds.select(".phrase-block")
+                           if (p := _parse_phrase_block(pb)) is not None]
+
                 for db in ds.select(".ddef_block"):
                     if db.find_parent(class_="phrase-block"):
                         continue
@@ -236,13 +245,11 @@ def scrape_cambridge(word: str, base_url: str = "") -> dict:
                             continue
                         ex_trans = ex_el.select_one(".trans.dtrans") or ex_el.select_one(".trans")
                         examples.append({"en": en_text, "zh": _text(ex_trans) if ex_trans else ""})
-                    # Phrases belonging to this dsense
-                    phrases = [p for pb in ds.select(".phrase-block")
-                               if (p := _parse_phrase_block(pb)) is not None]
                     if en or zh:
                         definitions.append({
                             "en": en, "zh": zh,
                             "gram": gram, "label": label, "usage": usage,
+                            "guideword": guideword,
                             "examples": examples,
                             "phrases": phrases,
                         })
