@@ -131,12 +131,70 @@ def build_attributed_string(data: dict, font_size: int = 14) -> NSMutableAttribu
             _append(mas, f"/{ipa}/  ", ipa_a)
         _append(mas, "\n", _attrs(f_pron, c_pron, _para(after=14)))
 
+    f_phrase   = NSFont.boldSystemFontOfSize_(_sz(13))
+    f_phrase_g = NSFont.systemFontOfSize_(_sz(11))
+    c_phrase   = NSColor.labelColor()
+    c_phrase_g = NSColor.secondaryLabelColor()
+
+    def _render_defs(defs, base_indent=0):
+        single = len(defs) == 1
+        for j, defn in enumerate(defs):
+            en    = defn.get("en", "")
+            zh    = defn.get("zh", "")
+            gram  = defn.get("gram", "")
+            label = defn.get("label", "")
+            usage = defn.get("usage", "")
+            exs   = defn.get("examples", [])
+
+            h_indent = base_indent if single else base_indent + INDENT
+            def_para = _para(
+                line=3,
+                before=6 if j > 0 else 0,
+                after=2,
+                head=h_indent,
+                first=base_indent,
+            )
+            if not single:
+                _append(mas, f"{j+1}. ", _attrs(f_num, c_num, def_para))
+            if en:
+                _append(mas, en, _attrs(f_en, c_en, def_para))
+            note_parts = [p for p in [gram, label] if p]
+            if note_parts:
+                _append(mas, "  " + "  ".join(note_parts),
+                        _attrs(f_note, c_note, def_para))
+            _append(mas, "\n", _attrs(f_en, c_en, def_para))
+
+            note_lower = {p.lower() for p in note_parts}
+            if usage and usage.lower() not in note_lower:
+                usage_para = _para(line=2, after=2,
+                                   head=h_indent, first=h_indent)
+                _append(mas, f"▸ {usage}\n",
+                        _attrs(f_note, c_note, usage_para))
+
+            if zh:
+                zh_para = _para(line=2, after=3, head=h_indent, first=h_indent)
+                _append(mas, zh + "\n", _attrs(f_zh, c_zh, zh_para))
+
+            for ex in exs:
+                ex_en = ex.get("en", "") if isinstance(ex, dict) else ex
+                ex_zh = ex.get("zh", "") if isinstance(ex, dict) else ""
+                ex_para = _para(line=2, after=1,
+                                head=h_indent + 14, first=h_indent + 2)
+                _append(mas, "• ", _attrs(f_ex_en, c_bullet, ex_para))
+                _append(mas, ex_en + "\n", _attrs(f_ex_en, c_ex_en, ex_para))
+                if ex_zh:
+                    ez_para = _para(line=2, after=3,
+                                    head=h_indent + 16, first=h_indent + 16)
+                    _append(mas, ex_zh + "\n",
+                            _attrs(f_ex_zh, c_ex_zh, ez_para))
+
     # ── Entries ──────────────────────────────────────────────────────────────
     for i, entry in enumerate(entries):
         pos      = entry.get("pos", "")
         pos_gram = entry.get("pos_gram", "")
         source   = entry.get("source", "")
         defs     = entry.get("definitions", [])
+        phrases  = entry.get("phrases", [])
 
         # Yellow divider — repeated ─ characters, clipped at line end
         _sep_ps = NSMutableParagraphStyle.alloc().init()
@@ -185,65 +243,31 @@ def build_attributed_string(data: dict, font_size: int = 14) -> NSMutableAttribu
                         _attrs(f_note, c_note, badge_para))
             _append(mas, "\n", _attrs(f_pos, c_pos_fg, _para(after=8)))
 
-        single = len(defs) == 1
+        _render_defs(defs, base_indent=0)
 
-        for j, defn in enumerate(defs):
-            en    = defn.get("en", "")
-            zh    = defn.get("zh", "")
-            gram  = defn.get("gram", "")
-            label = defn.get("label", "")
-            usage = defn.get("usage", "")
-            exs   = defn.get("examples", [])
+        # Phrase blocks (e.g. "directions [plural]", "in someone's direction")
+        for ph in phrases:
+            phrase_txt  = ph.get("phrase", "")
+            phrase_gram = ph.get("gram", "")
+            cefr        = ph.get("cefr", "")
+            variant     = ph.get("variant", "")
+            ph_defs     = ph.get("definitions", [])
 
-            # 只有一个含义时不缩进（无编号）
-            h_indent = 0 if single else INDENT
-            def_para = _para(
-                line=3,
-                before=6 if j > 0 else 0,
-                after=2,
-                head=h_indent,
-                first=0,
-            )
-            # 编号（多含义才显示）
-            if not single:
-                _append(mas, f"{j+1}. ", _attrs(f_num, c_num, def_para))
-            # English definition (bold)
-            if en:
-                _append(mas, en, _attrs(f_en, c_en, def_para))
-            # Inline grammar / label note
-            note_parts = [p for p in [gram, label] if p]
-            if note_parts:
-                _append(mas, "  " + "  ".join(note_parts),
-                        _attrs(f_note, c_note, def_para))
-            _append(mas, "\n", _attrs(f_en, c_en, def_para))
+            # Phrase heading row
+            ph_para = _para(line=3, before=14, after=2, head=0, first=0)
+            _append(mas, "▸ ", _attrs(f_phrase_g, c_phrase_g, ph_para))
+            _append(mas, phrase_txt, _attrs(f_phrase, c_phrase, ph_para))
+            notes = [p for p in [phrase_gram, cefr] if p]
+            if notes:
+                _append(mas, "  " + "  ".join(notes),
+                        _attrs(f_phrase_g, c_phrase_g, ph_para))
+            _append(mas, "\n", _attrs(f_phrase, c_phrase, ph_para))
+            if variant:
+                var_para = _para(line=2, after=2, head=INDENT, first=INDENT)
+                _append(mas, variant + "\n",
+                        _attrs(f_note, c_note, var_para))
 
-            # Usage note — 去重：已在内联 note 里出现的跳过
-            note_lower = {p.lower() for p in note_parts}
-            if usage and usage.lower() not in note_lower:
-                usage_para = _para(line=2, after=2,
-                                   head=h_indent, first=h_indent)
-                _append(mas, f"▸ {usage}\n",
-                        _attrs(f_note, c_note, usage_para))
-
-            # Chinese definition
-            if zh:
-                zh_para = _para(line=2, after=3, head=h_indent, first=h_indent)
-                _append(mas, zh + "\n", _attrs(f_zh, c_zh, zh_para))
-
-            # Examples
-            for ex in exs:
-                ex_en = ex.get("en", "") if isinstance(ex, dict) else ex
-                ex_zh = ex.get("zh", "") if isinstance(ex, dict) else ""
-
-                ex_para = _para(line=2, after=1,
-                                head=h_indent + 14, first=h_indent + 2)
-                _append(mas, "• ", _attrs(f_ex_en, c_bullet, ex_para))
-                _append(mas, ex_en + "\n", _attrs(f_ex_en, c_ex_en, ex_para))
-                if ex_zh:
-                    ez_para = _para(line=2, after=3,
-                                    head=h_indent + 16, first=h_indent + 16)
-                    _append(mas, ex_zh + "\n",
-                            _attrs(f_ex_zh, c_ex_zh, ez_para))
+            _render_defs(ph_defs, base_indent=INDENT)
 
 
     return mas
