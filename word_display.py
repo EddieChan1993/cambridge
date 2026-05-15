@@ -244,7 +244,14 @@ def build_attributed_string(data: dict, font_size: int = 14) -> NSMutableAttribu
             _append(mas, "\n", _attrs(f_pos, c_pos_fg, _para(after=8)))
 
         single = len(defs) == 1
+        prev_gw = None
         for j, defn in enumerate(defs):
+            # Suppress repeated guideword within the same dsense group
+            gw = defn.get("guideword", "")
+            if gw == prev_gw:
+                defn = dict(defn, guideword="")
+            else:
+                prev_gw = gw
             _render_one_def(defn, num=None if single else j + 1, base_indent=0)
             for ph in defn.get("phrases", []):
                 phrase_txt  = ph.get("phrase", "")
