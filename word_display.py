@@ -243,16 +243,25 @@ def build_attributed_string(data: dict, font_size: int = 14) -> NSMutableAttribu
                         _attrs(f_note, c_note, badge_para))
             _append(mas, "\n", _attrs(f_pos, c_pos_fg, _para(after=8)))
 
-        single = len(defs) == 1
+        real_defs = [d for d in defs if d.get("en") or d.get("zh")]
+        single = len(real_defs) == 1
         prev_gw = None
-        for j, defn in enumerate(defs):
+        def_num = 0
+        for defn in defs:
+            is_real = bool(defn.get("en") or defn.get("zh"))
+            if is_real:
+                def_num += 1
+
             # Suppress repeated guideword within the same dsense group
             gw = defn.get("guideword", "")
             if gw == prev_gw:
                 defn = dict(defn, guideword="")
             else:
                 prev_gw = gw
-            _render_one_def(defn, num=None if single else j + 1, base_indent=0)
+
+            if is_real:
+                _render_one_def(defn, num=None if single else def_num,
+                                base_indent=0)
             for ph in defn.get("phrases", []):
                 phrase_txt  = ph.get("phrase", "")
                 phrase_gram = ph.get("gram", "")

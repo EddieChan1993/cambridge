@@ -264,8 +264,20 @@ def scrape_cambridge(word: str, base_url: str = "") -> dict:
 
                     elif "phrase-block" in child_cls or "dphrase-block" in child_cls:
                         p = _parse_phrase_block(child)
-                        if p and last_def is not None:
-                            last_def["phrases"].append(p)
+                        if p:
+                            if last_def is not None:
+                                last_def["phrases"].append(p)
+                            else:
+                                # No preceding def — store as a standalone phrase def
+                                standalone = {
+                                    "en": "", "zh": "",
+                                    "gram": "", "label": "", "usage": "",
+                                    "guideword": guideword,
+                                    "examples": [],
+                                    "phrases": [p],
+                                }
+                                definitions.append(standalone)
+                                last_def = standalone
         else:
             # Fallback: no dsense grouping — collect ddef_blocks directly
             for db in block.select(".ddef_block"):
