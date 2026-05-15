@@ -250,16 +250,24 @@ def build_attributed_string(data: dict, font_size: int = 14) -> NSMutableAttribu
                 variant     = ph.get("variant", "")
                 ph_defs     = ph.get("definitions", [])
 
-                ph_para = _para(line=3, before=14, after=2, head=0, first=0)
-                _append(mas, "▸ ", _attrs(f_phrase_g, c_phrase_g, ph_para))
-                _append(mas, phrase_txt, _attrs(f_phrase, c_phrase, ph_para))
+                # Yellow banner — same colour as the POS divider
+                _ph_bg  = NSColor.systemYellowColor()
+                _ph_fg  = NSColor.colorWithWhite_alpha_(0.12, 1.0)
+                ph_para = _para(line=3, before=14, after=0, head=0, first=0)
+                _append(mas, " ▸ ",
+                        _attrs(f_phrase_g, _ph_fg, ph_para, bg=_ph_bg))
+                _append(mas, phrase_txt,
+                        _attrs(f_phrase,   _ph_fg, ph_para, bg=_ph_bg))
                 notes = [p for p in [phrase_gram, cefr] if p]
                 if notes:
                     _append(mas, "  " + "  ".join(notes),
-                            _attrs(f_phrase_g, c_phrase_g, ph_para))
-                _append(mas, "\n", _attrs(f_phrase, c_phrase, ph_para))
+                            _attrs(f_phrase_g, _ph_fg, ph_para, bg=_ph_bg))
+                # Trailing spaces fill the line width with background colour
+                _append(mas, " " * 80 + "\n",
+                        _attrs(f_phrase_g, _ph_fg, ph_para, bg=_ph_bg))
                 if variant:
-                    var_para = _para(line=2, after=2, head=INDENT, first=INDENT)
+                    var_para = _para(line=2, before=4, after=2,
+                                     head=INDENT, first=INDENT)
                     _append(mas, variant + "\n",
                             _attrs(f_note, c_note, var_para))
                 _render_defs(ph_defs, base_indent=INDENT)

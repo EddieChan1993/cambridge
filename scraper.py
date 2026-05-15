@@ -29,6 +29,15 @@ HEADERS = {
 }
 
 
+def _def_trans(db) -> str:
+    """Return the definition-level Chinese translation, skipping example translations."""
+    for t in db.select(".trans.dtrans, .trans"):
+        if not t.find_parent(class_="examp"):
+            raw = t.get_text(separator=" ")
+            return re.sub(r"\s+", " ", raw).strip()
+    return ""
+
+
 def _text(el, sep=" ") -> str:
     """Extract clean text, preserving word boundaries and fixing punctuation spacing."""
     if not el:
@@ -179,8 +188,7 @@ def scrape_cambridge(word: str, base_url: str = "") -> dict:
             for db in pb.select(".ddef_block"):
                 def_el = db.select_one(".def.ddef_d") or db.select_one(".def")
                 en = _text(def_el).rstrip(":")
-                trans_el = db.select_one(".trans.dtrans") or db.select_one(".trans")
-                zh = _text(trans_el)
+                zh = _def_trans(db)
                 gram2   = _text(db.select_one(".gram.dgram"))
                 label2  = _text(db.select_one(".lab.dlab"))
                 usage2  = _text(db.select_one(".usage.dusage"))
@@ -211,8 +219,7 @@ def scrape_cambridge(word: str, base_url: str = "") -> dict:
                         continue
                     def_el = db.select_one(".def.ddef_d") or db.select_one(".def")
                     en = _text(def_el).rstrip(":")
-                    trans_el = db.select_one(".trans.dtrans") or db.select_one(".trans")
-                    zh = _text(trans_el)
+                    zh = _def_trans(db)
                     gram_el = db.select_one(".gram.dgram")
                     gram    = _text(gram_el) if gram_el else ""
                     lab_el  = db.select_one(".lab.dlab")
