@@ -219,13 +219,14 @@ def scrape_cambridge(word: str, base_url: str = "") -> dict:
                 # Strip surrounding parens: "( POSITION )" → "POSITION"
                 guideword = re.sub(r"^\(\s*|\s*\)$", "", guideword).strip()
 
-                # Phrases belonging to this dsense (shared across all defs in the sense)
+                # Phrases belong to the whole dsense — attach only to the last def
                 phrases = [p for pb in ds.select(".phrase-block")
                            if (p := _parse_phrase_block(pb)) is not None]
 
-                for db in ds.select(".ddef_block"):
-                    if db.find_parent(class_="phrase-block"):
-                        continue
+                ds_defs = [db for db in ds.select(".ddef_block")
+                           if not db.find_parent(class_="phrase-block")]
+
+                for k, db in enumerate(ds_defs):
                     def_el = db.select_one(".def.ddef_d") or db.select_one(".def")
                     en = _text(def_el).rstrip(":")
                     zh = _def_trans(db)
@@ -251,7 +252,8 @@ def scrape_cambridge(word: str, base_url: str = "") -> dict:
                             "gram": gram, "label": label, "usage": usage,
                             "guideword": guideword,
                             "examples": examples,
-                            "phrases": phrases,
+                            # phrases only on the last definition of this dsense
+                            "phrases": phrases if k == len(ds_defs) - 1 else [],
                         })
         else:
             # Fallback: no dsense grouping — collect ddef_blocks directly
