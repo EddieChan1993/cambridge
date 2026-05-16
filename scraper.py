@@ -420,7 +420,13 @@ def scrape_cambridge(word: str, base_url: str = "") -> dict:
                      idiom_block.select_one(".headword") or
                      idiom_block.select_one("h2"))
             if hw_el:
-                result["word"] = hw_el.get_text(strip=True)
+                hw = _text(hw_el)
+                # Clean up spaces around punctuation in headwords like
+                # "be in the mood ( for something /to do something )"
+                hw = re.sub(r"\(\s+", "(", hw)
+                hw = re.sub(r"\s+\)", ")", hw)
+                hw = re.sub(r"\s*/\s*", "/", hw)
+                result["word"] = hw
 
             pos_el = idiom_block.select_one(".di-info .pos.dpos") or \
                      idiom_block.select_one(".di-info .pos")
