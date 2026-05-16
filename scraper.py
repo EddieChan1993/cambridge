@@ -84,7 +84,8 @@ def _fetch(url: str) -> tuple:
 
 def scrape_cambridge(word: str, base_url: str = "") -> dict:
     primary = base_url.strip().rstrip("/") if base_url else _DEFAULT_BASE_URL
-    slug = word.lower().strip()
+    # Cambridge URLs use hyphens for multi-word phrases (e.g. "feel free" → "feel-free")
+    slug = word.lower().strip().replace(" ", "-")
     url = f"{primary}/{slug}"
     result = {"word": word.strip(), "url": url, "pronunciations": [], "entries": []}
 
@@ -182,10 +183,6 @@ def scrape_cambridge(word: str, base_url: str = "") -> dict:
     if not blocks:
         # Fallback for pages without superentry wrapper
         blocks = soup.select(".pr.entry-body__el") or soup.select(".entry-body__el")
-
-    if not blocks:
-        result["error"] = "No dictionary entry found"
-        return result
 
     for block in blocks:
         block_cls = set(block.get("class") or [])
@@ -407,6 +404,59 @@ def scrape_cambridge(word: str, base_url: str = "") -> dict:
             result["entries"].append({
                 "pos": pos, "pos_gram": pos_gram,
                 "source": source, "definitions": definitions})
+
+    # ── Idiom pages (e.g. "feel free") ───────────────────────────────────────
+    # These pages have no .entry-body__el; content lives in .idiom-block instead.
+    if not result["entries"]:
+        idiom_block = None
+        for ib in soup.select(".idiom-block"):
+            if ib.select_one(".idiom-body, .didiom-body"):
+                idiom_block = ib
+                break
+
+        if idiom_block:
+            # Update word from the page headword (slug uses hyphens, headword has spaces)
+            hw_el = (idiom_block.select_one(".headword.dhw") or
+                     idiom_block.select_one(".headword") or
+                     idiom_block.select_one("h2"))
+            if hw_el:
+                result["word"] = hw_el.get_text(strip=True)
+
+            pos_el = idiom_block.select_one(".di-info .pos.dpos") or \
+                     idiom_block.select_one(".di-info .pos")
+            pos = _text(pos_el) if pos_el else "idiom"
+
+            definitions = []
+            idiom_body = idiom_block.select_one(".idiom-body, .didiom-body")
+            for db in idiom_body.select(".ddef_block, .def-block"):
+                def_el = db.select_one(".def.ddef_d") or db.select_one(".def")
+                en     = _text(def_el).rstrip(":") if def_el else ""
+                zh     = _def_trans(db)
+                gram   = _text(db.select_one(".gram.dgram") or db.select_one(".gram"))
+                label  = _text(db.select_one(".lab.dlab")   or db.select_one(".lab"))
+                usage  = _text(db.select_one(".usage.dusage"))
+                examples = []
+                for ex_el in db.select(".examp.dexamp")[:3]:
+                    eg = ex_el.select_one(".eg.deg") or ex_el.select_one(".eg")
+                    en_text = _text(eg) if eg else ""
+                    if not en_text:
+                        continue
+                    ex_trans = ex_el.select_one(".trans.dtrans") or ex_el.select_one(".trans")
+                    examples.append({"en": en_text,
+                                     "zh": _text(ex_trans) if ex_trans else ""})
+                if en or zh:
+                    xrefs = _parse_xrefs(db)
+                    definitions.append({
+                        "en": en, "zh": zh, "gram": gram, "label": label,
+                        "usage": usage, "guideword": "", "examples": examples,
+                        "phrases": [],
+                        "synonyms": xrefs["synonyms"], "antonyms": xrefs["antonyms"],
+                    })
+
+            if definitions:
+                result["entries"].append({
+                    "pos": pos, "pos_gram": "", "source": "", "definitions": definitions,
+                })
 
     if not result["entries"]:
         result["error"] = "No definitions found"
