@@ -155,10 +155,17 @@ def build_attributed_string(data: dict, font_size: int = 14) -> NSMutableAttribu
             hdr_ps.setLineSpacing_(2.0)
             hdr_ps.setHeadIndent_(h_indent)
             hdr_ps.setFirstLineHeadIndent_(h_indent)
+            hdr_ps.setLineBreakMode_(2)   # NSLineBreakByClipping
             hdr_ps.setTailIndent_(-50.0)
-            _append(mas, " " + section_label + " " * 80 + "\n",
+            _append(mas, " " + section_label,
                     {NSFontAttributeName: f_xref_hdr,
                      NSForegroundColorAttributeName: c_xref_hdr,
+                     NSBackgroundColorAttributeName: c_xref_bg,
+                     NSParagraphStyleAttributeName: hdr_ps})
+            # Fill remainder with invisible █ (fg=bg) — non-whitespace ensures bg draws to tailIndent
+            _append(mas, "█" * 300 + "\n",
+                    {NSFontAttributeName: f_xref_hdr,
+                     NSForegroundColorAttributeName: c_xref_bg,
                      NSBackgroundColorAttributeName: c_xref_bg,
                      NSParagraphStyleAttributeName: hdr_ps})
             for w in words:
@@ -283,9 +290,14 @@ def build_attributed_string(data: dict, font_size: int = 14) -> NSMutableAttribu
                      NSBackgroundColorAttributeName: _src_bg,
                      NSParagraphStyleAttributeName: _src_ps})
             # Separator + source name + trailing spaces to fill width
-            _append(mas, f"| {source}" + " " * 120 + "\n",
+            _append(mas, f"| {source}",
                     {NSFontAttributeName: NSFont.systemFontOfSize_(_sz(13)),
                      NSForegroundColorAttributeName: _src_fg,
+                     NSBackgroundColorAttributeName: _src_bg,
+                     NSParagraphStyleAttributeName: _src_ps})
+            _append(mas, "█" * 300 + "\n",
+                    {NSFontAttributeName: NSFont.systemFontOfSize_(_sz(13)),
+                     NSForegroundColorAttributeName: _src_bg,
                      NSBackgroundColorAttributeName: _src_bg,
                      NSParagraphStyleAttributeName: _src_ps})
 
@@ -330,7 +342,14 @@ def build_attributed_string(data: dict, font_size: int = 14) -> NSMutableAttribu
                 # Yellow banner — same colour as the POS divider
                 _ph_bg  = NSColor.systemYellowColor()
                 _ph_fg  = NSColor.colorWithWhite_alpha_(0.12, 1.0)
-                ph_para = _para(line=3, before=14, after=0, head=0, first=0)
+                ph_para = NSMutableParagraphStyle.alloc().init()
+                ph_para.setLineSpacing_(3)
+                ph_para.setParagraphSpacingBefore_(14)
+                ph_para.setParagraphSpacing_(0)
+                ph_para.setHeadIndent_(0)
+                ph_para.setFirstLineHeadIndent_(0)
+                ph_para.setLineBreakMode_(2)   # NSLineBreakByClipping — ensures bg fills full width
+                ph_para.setTailIndent_(-50.0)  # leave room for scrollbar
                 _append(mas, " ▸ ",
                         _attrs(f_phrase_g, _ph_fg, ph_para, bg=_ph_bg))
                 _append(mas, phrase_txt,
@@ -339,9 +358,9 @@ def build_attributed_string(data: dict, font_size: int = 14) -> NSMutableAttribu
                 if notes:
                     _append(mas, "  " + "  ".join(notes),
                             _attrs(f_phrase_g, _ph_fg, ph_para, bg=_ph_bg))
-                # Trailing spaces fill the line width with background colour
-                _append(mas, " " * 80 + "\n",
-                        _attrs(f_phrase_g, _ph_fg, ph_para, bg=_ph_bg))
+                # Fill remainder with invisible █ (fg=bg) — non-whitespace ensures bg draws to tailIndent
+                _append(mas, "█" * 300 + "\n",
+                        _attrs(f_phrase, _ph_bg, ph_para, bg=_ph_bg))
                 if variant:
                     var_para = _para(line=2, before=4, after=2,
                                      head=INDENT, first=INDENT)
