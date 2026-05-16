@@ -158,10 +158,12 @@ content view (full window)
 - **Numbering**: skipped when a POS section has only one definition (`len(defs) == 1`).
 - **Deduplication**: `usage` field not shown as `▸ line` if already present in inline `gram`/`label` notes.
 - **Example sentences**: italic via `NSFontManager.convertFont_toHaveTrait_(font, 1)` (NSItalicFontMask=1).
-- **Full-width separator pitfalls**:
-  - `NSBackgroundColorAttributeName` on `\n` does NOT render a full-width background — only covers the glyph width (zero for `\n`).
-  - `NSTextAttachment` subclass approach works in theory but is fragile in PyObjC — avoid.
-  - **Simplest reliable approach**: repeated `─` + `NSLineBreakByClipping`.
+- **Full-width background bars**:
+  - `NSBackgroundColorAttributeName` only covers actual glyph bounds — it does NOT fill to the line end automatically.
+  - Trailing **spaces** are stripped by NSTextView's line layout engine; their backgrounds are never drawn beyond the last non-whitespace character, regardless of how many spaces are appended.
+  - **Reliable approach**: append a run of `█` (U+2588 FULL BLOCK) characters with `NSForegroundColorAttributeName = background color` (visually invisible) + `NSBackgroundColorAttributeName = background color`. Block chars have real glyph width and are not stripped, so the background fills exactly to the `tailIndent` clip point.
+  - Always pair with `setLineBreakMode_(2)` (NSLineBreakByClipping) and `setTailIndent_(-50.0)` on the paragraph style so all bars clip at the same right edge as the separator line.
+  - **Separator line** (foreground-colored `─` chars + NSLineBreakByClipping): still the simplest for lines with no background fill needed.
 
 ### Pronunciation (inline in NSTextView)
 
