@@ -621,6 +621,7 @@ class MainWindowController(NSObject):
                 dm.remove_history(word)
             else:
                 dm.remove_favorite(word)
+            dm.remove_cached(word)
             self.refreshList()
 
     # alias used by _WordTable keyDown_

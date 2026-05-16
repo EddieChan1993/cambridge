@@ -88,6 +88,12 @@ class DataManager:
                 pass
         return count
 
+    def remove_cached(self, word: str):
+        key = word.lower().strip()
+        if key in self.cache:
+            del self.cache[key]
+            self._save(CACHE_FILE, self.cache)
+
     def clear_cache(self):
         self.cache = {}
         self._save(CACHE_FILE, self.cache)
