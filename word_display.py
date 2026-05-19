@@ -164,10 +164,14 @@ def build_attributed_string(data: dict, font_size: int = 14) -> NSMutableAttribu
             hdr_ps.setFirstLineHeadIndent_(h_indent)
             hdr_ps.setLineBreakMode_(2)   # NSLineBreakByClipping
             hdr_ps.setTailIndent_(_sep_width)   # positive = fixed px from left = same as divider
-            _append(mas, " " + section_label + "\n",
+            _append(mas, " " + section_label + " ",
                     {NSFontAttributeName: f_xref_hdr,
                      NSForegroundColorAttributeName: c_xref_hdr,
                      NSBackgroundColorAttributeName: c_xref_bg,
+                     NSParagraphStyleAttributeName: hdr_ps})
+            _append(mas, "\n",
+                    {NSFontAttributeName: f_xref_hdr,
+                     NSForegroundColorAttributeName: c_xref_hdr,
                      NSParagraphStyleAttributeName: hdr_ps})
             for w in words:
                 word_str = w.get("word", "")
@@ -296,7 +300,7 @@ def build_attributed_string(data: dict, font_size: int = 14) -> NSMutableAttribu
                      NSForegroundColorAttributeName: _src_fg,
                      NSBackgroundColorAttributeName: _src_bg,
                      NSParagraphStyleAttributeName: _src_ps})
-            _append(mas, "█" * 300 + "\n",
+            _append(mas, "\n",
                     {NSFontAttributeName: NSFont.systemFontOfSize_(_sz(13)),
                      NSForegroundColorAttributeName: _src_bg,
                      NSBackgroundColorAttributeName: _src_bg,
@@ -350,7 +354,7 @@ def build_attributed_string(data: dict, font_size: int = 14) -> NSMutableAttribu
                 ph_para.setHeadIndent_(0)
                 ph_para.setFirstLineHeadIndent_(0)
                 ph_para.setLineBreakMode_(2)   # NSLineBreakByClipping
-                ph_para.setTailIndent_(_sep_width)  # same fixed width as the ─×44 yellow divider
+                ph_para.setTailIndent_(-50.0)
                 _append(mas, " ▸ ",
                         _attrs(f_phrase_g, _ph_fg, ph_para, bg=_ph_bg))
                 _append(mas, phrase_txt,
@@ -359,7 +363,12 @@ def build_attributed_string(data: dict, font_size: int = 14) -> NSMutableAttribu
                 if notes:
                     _append(mas, "  " + "  ".join(notes),
                             _attrs(f_phrase_g, _ph_fg, ph_para, bg=_ph_bg))
-                _append(mas, "\n", _attrs(f_phrase_g, _ph_fg, ph_para))
+                # \n inside a background run fills the line fragment cleanly to tailIndent.
+                _append(mas, "\n",
+                        {NSFontAttributeName: f_phrase_g,
+                         NSForegroundColorAttributeName: _ph_fg,
+                         NSBackgroundColorAttributeName: _ph_bg,
+                         NSParagraphStyleAttributeName: ph_para})
                 if variant:
                     var_para = _para(line=2, before=4, after=2,
                                      head=INDENT, first=INDENT)
