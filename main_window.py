@@ -34,6 +34,7 @@ from AppKit import (
     NSMenuItem,
     NSTrackingArea,
     NSBezierPath,
+    NSSearchField,
     NSTextAlignmentLeft,
     NSTextAlignmentCenter,
     NSTextAlignmentRight,
@@ -244,12 +245,14 @@ class MainWindowController(NSObject):
         self._ov_icon        = None
         self._ov_title       = None
         self._ov_hint        = None
-        self._table        = None
-        self._seg          = None
-        self._stat_label   = None
-        self._clear_btn    = None
-        self._export_btn   = None
-        self._search_field = None
+        self._table          = None
+        self._seg            = None
+        self._stat_label     = None
+        self._clear_btn      = None
+        self._export_btn     = None
+        self._sidebar_search = None
+        self._sidebar_filter = ""
+        self._search_field   = None
         self._fav_btn      = None
         self._content_tv   = None
         self._build()
@@ -304,6 +307,24 @@ class MainWindowController(NSObject):
         sep_top.setAutoresizingMask_(2 | 8)
         left.addSubview_(sep_top)
 
+        # Sidebar search field — sits between top separator and word list
+        _SRCH_H    = 28   # field height
+        _SRCH_ZONE = 38   # total vertical zone reserved for the field
+        srch = NSSearchField.alloc().initWithFrame_(
+            NSMakeRect(8, ch - RIGHT_HDR - 1 - _SRCH_ZONE + 5, LEFT_W - 16, _SRCH_H))
+        srch.setPlaceholderString_("搜索")
+        srch.setAutoresizingMask_(2 | 8)   # width-sizable + pin to top
+        srch.setDelegate_(self)
+        left.addSubview_(srch)
+
+        # Thin separator below search field
+        sep_srch = NSView.alloc().initWithFrame_(
+            NSMakeRect(0, ch - RIGHT_HDR - 1 - _SRCH_ZONE, LEFT_W, 1))
+        sep_srch.setWantsLayer_(True)
+        sep_srch.layer().setBackgroundColor_(NSColor.separatorColor().CGColor())
+        sep_srch.setAutoresizingMask_(2 | 8)
+        left.addSubview_(sep_srch)
+
         # Word list scroll + table — fills between top and bottom areas
         _BTN_H  = 36    # height reserved at bottom for action buttons
         _STAT_H = 20    # stat label band height above button area
@@ -320,7 +341,8 @@ class MainWindowController(NSObject):
         left.addSubview_(stat_label)
 
         list_scroll = _VScrollView.alloc().initWithFrame_(
-            NSMakeRect(0, _BTN_H + _STAT_H, LEFT_W, ch - RIGHT_HDR - 1 - _BTN_H - _STAT_H))
+            NSMakeRect(0, _BTN_H + _STAT_H, LEFT_W,
+                       ch - RIGHT_HDR - 1 - _SRCH_ZONE - _BTN_H - _STAT_H))
         list_scroll.setHasVerticalScroller_(True)
         list_scroll.setHasHorizontalScroller_(False)
         list_scroll.setAutohidesScrollers_(True)
@@ -501,15 +523,16 @@ class MainWindowController(NSObject):
         content.addSubview_(sep_main)
         content.addSubview_(left)
 
-        self._window       = win
-        self._right_view   = right
-        self._sep_main     = sep_main
-        self._sidebar_view = left
-        self._table        = table
-        self._seg          = seg
-        self._stat_label   = stat_label
-        self._clear_btn    = clear_btn
-        self._export_btn   = export_btn
+        self._window         = win
+        self._right_view     = right
+        self._sep_main       = sep_main
+        self._sidebar_view   = left
+        self._table          = table
+        self._seg            = seg
+        self._stat_label     = stat_label
+        self._clear_btn      = clear_btn
+        self._export_btn     = export_btn
+        self._sidebar_search = srch
         self._search_field = search_field
         self._fav_btn      = fav_btn
         self._content_tv   = tv
@@ -582,7 +605,17 @@ class MainWindowController(NSObject):
     def segmentChanged_(self, sender):
         self._mode = "history" if sender.selectedSegment() == 0 else "favorites"
         self._repositionBottomButtons()
+        # Clear search filter when switching tabs
+        self._sidebar_filter = ""
+        if self._sidebar_search is not None:
+            self._sidebar_search.setStringValue_("")
         self.refreshList()
+
+    def controlTextDidChange_(self, notification):
+        field = notification.object()
+        if self._sidebar_search is not None and field == self._sidebar_search:
+            self._sidebar_filter = self._sidebar_search.stringValue() or ""
+            self.refreshList()
 
     @objc.python_method
     def _repositionBottomButtons(self):
@@ -700,19 +733,29 @@ class MainWindowController(NSObject):
         if not self._delegate:
             return
         dm = self._delegate.data_manager
-        self._list_data = (
+        all_words = (
             dm.get_history() if self._mode == "history" else dm.get_favorites()
         )
+        q = self._sidebar_filter.lower().strip()
+        if q:
+            self._list_data = [w for w in all_words if q in w.lower()]
+        else:
+            self._list_data = all_words
         self._reloading = True
         self._table.reloadData()
         self._reloading = False
         if self._stat_label:
-            total = len(self._list_data)
+            total = len(all_words)
+            shown = len(self._list_data)
             if self._mode == "history":
                 today = dm.get_today_history_count()
-                self._stat_label.setStringValue_(f"共 {total} 条 · 今日 {today} 条")
+                base = f"共 {total} 条 · 今日 {today} 条"
             else:
-                self._stat_label.setStringValue_(f"共 {total} 个收藏")
+                base = f"共 {total} 个收藏"
+            if q and shown != total:
+                self._stat_label.setStringValue_(f"{base} · 匹配 {shown}")
+            else:
+                self._stat_label.setStringValue_(base)
 
     @objc.python_method
     def refreshHistory(self):
