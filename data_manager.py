@@ -1,21 +1,66 @@
 import json
 import os
+import shutil
 from datetime import datetime, timedelta
 from pathlib import Path
 
-DATA_DIR = Path.home() / ".cambridge_tool"
-HISTORY_FILE = DATA_DIR / "history.json"
-FAVORITES_FILE = DATA_DIR / "favorites.json"
-CACHE_FILE = DATA_DIR / "cache.json"
+LOCAL_DIR = Path.home() / ".cambridge_tool"
+CACHE_FILE = LOCAL_DIR / "cache.json"
 CACHE_EXPIRY_DAYS = 7
 
 
 class DataManager:
-    def __init__(self):
-        DATA_DIR.mkdir(exist_ok=True)
-        self.history   = self._load(HISTORY_FILE,   [])
-        self.favorites = self._load(FAVORITES_FILE, {})
+    def __init__(self, sync_dir: str = ""):
+        LOCAL_DIR.mkdir(exist_ok=True)
+        self._sync_dir: Path | None = self._resolve_sync_dir(sync_dir)
+        if self._sync_dir:
+            self._sync_dir.mkdir(parents=True, exist_ok=True)
+        self.history   = self._load(self._history_file,   [])
+        self.favorites = self._load(self._favorites_file, {})
         self._cache    = None   # lazy: loaded only on first word lookup
+
+    @property
+    def _history_file(self) -> Path:
+        return (self._sync_dir / "history.json") if self._sync_dir \
+               else (LOCAL_DIR / "history.json")
+
+    @property
+    def _favorites_file(self) -> Path:
+        return (self._sync_dir / "favorites.json") if self._sync_dir \
+               else (LOCAL_DIR / "favorites.json")
+
+    def has_local_data(self) -> bool:
+        return (LOCAL_DIR / "history.json").exists() \
+            or (LOCAL_DIR / "favorites.json").exists()
+
+    def sync_path_has_data(self, path: str) -> bool:
+        p = self._resolve_sync_dir(path)
+        return p is not None and (
+            (p / "history.json").exists() or (p / "favorites.json").exists()
+        )
+
+    def migrate_local_to_path(self, dest: str):
+        """Copy local history/favorites to dest/HotDict/ (skip if already present)."""
+        dest_dir = self._resolve_sync_dir(dest)
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        for fname in ("history.json", "favorites.json"):
+            src = LOCAL_DIR / fname
+            dst = dest_dir / fname
+            if src.exists() and not dst.exists():
+                shutil.copy2(src, dst)
+
+    @staticmethod
+    def _resolve_sync_dir(path: str) -> Path | None:
+        """Append HotDict subfolder so files don't clutter the cloud root."""
+        return (Path(path) / "HotDict") if path else None
+
+    def set_sync_dir(self, path: str):
+        """Switch active data directory and reload history/favorites."""
+        self._sync_dir = self._resolve_sync_dir(path)
+        if self._sync_dir:
+            self._sync_dir.mkdir(parents=True, exist_ok=True)
+        self.history   = self._load(self._history_file,   [])
+        self.favorites = self._load(self._favorites_file, {})
 
     @property
     def cache(self):
@@ -72,7 +117,7 @@ class DataManager:
         self.history = [h for h in self.history if h["word"].lower() != word.lower()]
         self.history.insert(0, {"word": word, "time": datetime.now().isoformat()})
         self.history = self.history[:200]
-        self._save(HISTORY_FILE, self.history)
+        self._save(self._history_file, self.history)
 
     def get_history(self) -> list:
         return [h["word"] for h in self.history]
@@ -100,11 +145,11 @@ class DataManager:
 
     def remove_history(self, word: str):
         self.history = [h for h in self.history if h["word"].lower() != word.lower()]
-        self._save(HISTORY_FILE, self.history)
+        self._save(self._history_file, self.history)
 
     def clear_history(self):
         self.history = []
-        self._save(HISTORY_FILE, self.history)
+        self._save(self._history_file, self.history)
         self.clear_cache()
 
     # ── Favorites ────────────────────────────────────────────────────────────
@@ -114,14 +159,14 @@ class DataManager:
         key = word.lower().strip()
         if key in self.favorites:
             del self.favorites[key]
-            self._save(FAVORITES_FILE, self.favorites)
+            self._save(self._favorites_file, self.favorites)
             return False
         self.favorites[key] = {
             "word": word.strip(),
             "data": data or {},
             "time": datetime.now().isoformat(),
         }
-        self._save(FAVORITES_FILE, self.favorites)
+        self._save(self._favorites_file, self.favorites)
         return True
 
     def is_favorite(self, word: str) -> bool:
@@ -134,18 +179,18 @@ class DataManager:
         key = word.lower().strip()
         if key in self.favorites:
             del self.favorites[key]
-            self._save(FAVORITES_FILE, self.favorites)
+            self._save(self._favorites_file, self.favorites)
 
     def clear_favorites(self):
         self.favorites = {}
-        self._save(FAVORITES_FILE, self.favorites)
+        self._save(self._favorites_file, self.favorites)
         self.clear_cache()
 
     def update_favorite_data(self, word: str, data: dict):
         key = word.lower().strip()
         if key in self.favorites:
             self.favorites[key]["data"] = data
-            self._save(FAVORITES_FILE, self.favorites)
+            self._save(self._favorites_file, self.favorites)
 
     # ── Export ───────────────────────────────────────────────────────────────
 

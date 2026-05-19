@@ -56,8 +56,8 @@ class AppDelegate(NSObject):
     def applicationDidFinishLaunching_(self, notification):
         self._enforceSingleInstance()
 
-        self.data_manager   = DataManager()
         self.settings       = Settings()
+        self.data_manager   = DataManager(self.settings.sync_data_path)
 
         # ── 状态栏图标 ─────────────────────────────────────────────────────
         self._status_item = NSStatusBar.systemStatusBar().statusItemWithLength_(
@@ -166,6 +166,11 @@ class AppDelegate(NSObject):
         if self._hotkey:
             self._hotkey.stop()
         self._hotkey = HotkeyMonitor(self, keycode, modifiers)
+
+    @objc.python_method
+    def applySyncPath(self, path: str):
+        self.data_manager.set_sync_dir(path)
+        self.main_window.refreshList()
 
     @objc.python_method
     def applyFontSize(self, size: int):

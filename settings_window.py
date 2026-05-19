@@ -25,7 +25,7 @@ from AppKit import (
 
 from settings import Settings, hotkey_display, check_conflict
 
-W, H = 440, 560
+W, H = 440, 710
 M = 24          # left/right margin
 IW = W - 2 * M  # inner width = 392
 
@@ -57,6 +57,7 @@ class SettingsWindowController(NSObject):
         self._sidebar_check     = None
         self._font_slider       = None
         self._font_size_label   = None
+        self._sync_path_field   = None
         self._build()
         return self
 
@@ -290,6 +291,39 @@ class SettingsWindowController(NSObject):
         cancel_btn.setTarget_(self); cancel_btn.setAction_("cancelSettings:")
         c.addSubview_(cancel_btn)
 
+        # ── Section 6: 数据同步路径 ─────────────────────────────────────────────
+        # top=530 sep, top=548 title, top=570 subtitle, top=591 path field,
+        # top=623 buttons row
+        c.addSubview_(_sep(530))
+        c.addSubview_(_lbl("数据同步路径", 548, 18, bold=True))
+        c.addSubview_(_lbl("收藏和历史将读写此目录，把该目录放在云盘即可多端同步。",
+                           570, 13, size=11, color=GRAY))
+
+        sync_path_field = NSTextField.alloc().initWithFrame_(RI(591, 24))
+        sync_path_field.setStringValue_(self._settings.sync_data_path)
+        sync_path_field.setBezeled_(True); sync_path_field.setBezelStyle_(1)
+        sync_path_field.setEditable_(False); sync_path_field.setSelectable_(True)
+        sync_path_field.setFont_(NSFont.monospacedSystemFontOfSize_weight_(11, 0.0))
+        sync_path_field.setPlaceholderString_("未设置，使用本地默认目录")
+        sync_path_field.setTextColor_(NSColor.labelColor())
+        c.addSubview_(sync_path_field)
+
+        select_btn = NSButton.alloc().initWithFrame_(R(M, 623, 100, 24))
+        select_btn.setTitle_("选择文件夹…")
+        select_btn.setBezelStyle_(NSBezelStyleRounded)
+        select_btn.setButtonType_(NSButtonTypeMomentaryLight)
+        select_btn.setFont_(NSFont.systemFontOfSize_(12))
+        select_btn.setTarget_(self); select_btn.setAction_("selectSyncPath:")
+        c.addSubview_(select_btn)
+
+        clear_btn = NSButton.alloc().initWithFrame_(R(M + 108, 623, 72, 24))
+        clear_btn.setTitle_("清除路径")
+        clear_btn.setBezelStyle_(NSBezelStyleRounded)
+        clear_btn.setButtonType_(NSButtonTypeMomentaryLight)
+        clear_btn.setFont_(NSFont.systemFontOfSize_(12))
+        clear_btn.setTarget_(self); clear_btn.setAction_("clearSyncPath:")
+        c.addSubview_(clear_btn)
+
         self._window          = win
         self._hotkey_field    = hotkey_field
         self._conflict_label  = conflict_label
@@ -301,6 +335,7 @@ class SettingsWindowController(NSObject):
         self._sidebar_check   = sidebar_check
         self._font_slider     = font_slider
         self._font_size_label = font_size_label
+        self._sync_path_field = sync_path_field
 
     # ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -467,6 +502,51 @@ class SettingsWindowController(NSObject):
                 self._pending_show_keycode, self._pending_show_modifiers)
         self._window.orderOut_(None)
 
+    @objc.IBAction
+    def selectSyncPath_(self, sender):
+        from AppKit import NSOpenPanel
+        panel = NSOpenPanel.openPanel()
+        panel.setCanChooseDirectories_(True)
+        panel.setCanChooseFiles_(False)
+        panel.setAllowsMultipleSelection_(False)
+        panel.setTitle_("选择同步目录")
+        panel.setPrompt_("选择")
+        if panel.runModal() != 1:
+            return
+        path = str(panel.URLs()[0].path())
+
+        dm = self._delegate.data_manager if self._delegate else None
+        if dm and not dm.sync_path_has_data(path) and dm.has_local_data():
+            alert = self._migrationAlert()
+            if alert.runModal() == 1000:  # NSAlertFirstButtonReturn
+                dm.migrate_local_to_path(path)
+
+        self._settings.set_sync_data_path(path)
+        self._sync_path_field.setStringValue_(path)
+        if self._delegate and hasattr(self._delegate, "applySyncPath"):
+            self._delegate.applySyncPath(path)
+
+    @objc.IBAction
+    def clearSyncPath_(self, sender):
+        self._settings.set_sync_data_path("")
+        self._sync_path_field.setStringValue_("")
+        if self._delegate and hasattr(self._delegate, "applySyncPath"):
+            self._delegate.applySyncPath("")
+
+    @objc.python_method
+    def _migrationAlert(self):
+        from AppKit import NSAlert
+        alert = NSAlert.alloc().init()
+        alert.setMessageText_("是否迁移现有数据？")
+        alert.setInformativeText_(
+            "检测到本地存有收藏/历史记录，而所选目录为空。\n"
+            "是否将本地数据复制到新目录？\n\n"
+            "（选「不迁移」后，原数据仍保留在本地目录，新目录将从空白开始。）"
+        )
+        alert.addButtonWithTitle_("迁移数据")
+        alert.addButtonWithTitle_("不迁移")
+        return alert
+
     # ── NSWindowDelegate ──────────────────────────────────────────────────────
 
     def windowShouldClose_(self, sender):
@@ -490,5 +570,6 @@ class SettingsWindowController(NSObject):
         cur = self._settings.font_size
         self._font_slider.setIntValue_(cur)
         self._font_size_label.setStringValue_(f"{cur} pt")
+        self._sync_path_field.setStringValue_(self._settings.sync_data_path)
         NSApplication.sharedApplication().activateIgnoringOtherApps_(True)
         self._window.orderFrontRegardless()

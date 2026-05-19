@@ -57,6 +57,7 @@ DEFAULTS = {
     "lookup_base_url": DEFAULT_LOOKUP_URL,
     "sidebar_open_on_start": False,
     "font_size": 14,
+    "sync_data_path": "",
 }
 
 
@@ -146,4 +147,12 @@ class Settings:
 
     def set_font_size(self, size: int):
         self._data["font_size"] = int(size)
+        self.save()
+
+    @property
+    def sync_data_path(self) -> str:
+        return self._data.get("sync_data_path", "")
+
+    def set_sync_data_path(self, path: str):
+        self._data["sync_data_path"] = path.strip()
         self.save()
