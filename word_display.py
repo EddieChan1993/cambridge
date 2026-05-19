@@ -267,7 +267,7 @@ def build_attributed_string(data: dict, font_size: int = 14) -> NSMutableAttribu
         _sep_ps.setParagraphSpacing_(12.0)
         _sep_ps.setLineBreakMode_(2)   # NSLineBreakByClipping
         _sep_ps.setTailIndent_(-50.0)  # 右侧留边距（含滚动条宽度）
-        _append(mas, "─" * 44 + "\n",
+        _append(mas, "─" * 200 + "\n",
                 {
                     NSFontAttributeName: NSFont.boldSystemFontOfSize_(_sz(15)),
                     NSForegroundColorAttributeName: NSColor.systemYellowColor(),
@@ -358,9 +358,13 @@ def build_attributed_string(data: dict, font_size: int = 14) -> NSMutableAttribu
                 if notes:
                     _append(mas, "  " + "  ".join(notes),
                             _attrs(f_phrase_g, _ph_fg, ph_para, bg=_ph_bg))
-                # Fill remainder with invisible █ (fg=bg) — non-whitespace ensures bg draws to tailIndent
-                _append(mas, "█" * 300 + "\n",
-                        _attrs(f_phrase, _ph_bg, ph_para, bg=_ph_bg))
+                # Fill remainder with ─ (fg=bg=yellow) — same character as the divider above,
+                # so NSLineBreakByClipping stops both at the exact same tailIndent pixel.
+                _append(mas, "─" * 200 + "\n",
+                        {NSFontAttributeName: NSFont.boldSystemFontOfSize_(_sz(15)),
+                         NSForegroundColorAttributeName: _ph_bg,
+                         NSBackgroundColorAttributeName: _ph_bg,
+                         NSParagraphStyleAttributeName: ph_para})
                 if variant:
                     var_para = _para(line=2, before=4, after=2,
                                      head=INDENT, first=INDENT)
