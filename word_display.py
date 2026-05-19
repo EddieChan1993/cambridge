@@ -354,8 +354,8 @@ def build_attributed_string(data: dict, font_size: int = 14) -> NSMutableAttribu
                 ph_para.setParagraphSpacing_(0)
                 ph_para.setHeadIndent_(0)
                 ph_para.setFirstLineHeadIndent_(0)
-                ph_para.setLineBreakMode_(2)   # NSLineBreakByClipping — ensures bg fills full width
-                ph_para.setTailIndent_(-50.0)  # leave room for scrollbar
+                ph_para.setLineBreakMode_(2)   # NSLineBreakByClipping
+                ph_para.setTailIndent_(_sep_width)  # same fixed width as the ─×44 yellow divider
                 _append(mas, " ▸ ",
                         _attrs(f_phrase_g, _ph_fg, ph_para, bg=_ph_bg))
                 _append(mas, phrase_txt,
