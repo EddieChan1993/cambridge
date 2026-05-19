@@ -164,14 +164,9 @@ def build_attributed_string(data: dict, font_size: int = 14) -> NSMutableAttribu
             hdr_ps.setFirstLineHeadIndent_(h_indent)
             hdr_ps.setLineBreakMode_(2)   # NSLineBreakByClipping
             hdr_ps.setTailIndent_(_sep_width)   # positive = fixed px from left = same as divider
-            _append(mas, " " + section_label,
+            _append(mas, " " + section_label + "\n",
                     {NSFontAttributeName: f_xref_hdr,
                      NSForegroundColorAttributeName: c_xref_hdr,
-                     NSBackgroundColorAttributeName: c_xref_bg,
-                     NSParagraphStyleAttributeName: hdr_ps})
-            _append(mas, "█" * 300 + "\n",
-                    {NSFontAttributeName: f_xref_hdr,
-                     NSForegroundColorAttributeName: c_xref_bg,
                      NSBackgroundColorAttributeName: c_xref_bg,
                      NSParagraphStyleAttributeName: hdr_ps})
             for w in words:
@@ -364,12 +359,7 @@ def build_attributed_string(data: dict, font_size: int = 14) -> NSMutableAttribu
                 if notes:
                     _append(mas, "  " + "  ".join(notes),
                             _attrs(f_phrase_g, _ph_fg, ph_para, bg=_ph_bg))
-                # █×44 at the same font as the ─×44 divider → identical total glyph width.
-                _append(mas, "█" * 44 + "\n",
-                        {NSFontAttributeName: NSFont.boldSystemFontOfSize_(_sz(15)),
-                         NSForegroundColorAttributeName: _ph_bg,
-                         NSBackgroundColorAttributeName: _ph_bg,
-                         NSParagraphStyleAttributeName: ph_para})
+                _append(mas, "\n", _attrs(f_phrase_g, _ph_fg, ph_para))
                 if variant:
                     var_para = _para(line=2, before=4, after=2,
                                      head=INDENT, first=INDENT)
