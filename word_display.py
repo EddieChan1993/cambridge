@@ -267,7 +267,7 @@ def build_attributed_string(data: dict, font_size: int = 14) -> NSMutableAttribu
         _sep_ps.setParagraphSpacing_(12.0)
         _sep_ps.setLineBreakMode_(2)   # NSLineBreakByClipping
         _sep_ps.setTailIndent_(-50.0)  # 右侧留边距（含滚动条宽度）
-        _append(mas, "─" * 200 + "\n",
+        _append(mas, "─" * 44 + "\n",
                 {
                     NSFontAttributeName: NSFont.boldSystemFontOfSize_(_sz(15)),
                     NSForegroundColorAttributeName: NSColor.systemYellowColor(),
@@ -358,9 +358,8 @@ def build_attributed_string(data: dict, font_size: int = 14) -> NSMutableAttribu
                 if notes:
                     _append(mas, "  " + "  ".join(notes),
                             _attrs(f_phrase_g, _ph_fg, ph_para, bg=_ph_bg))
-                # Fill remainder with ─ (fg=bg=yellow) — same character as the divider above,
-                # so NSLineBreakByClipping stops both at the exact same tailIndent pixel.
-                _append(mas, "─" * 200 + "\n",
+                # Fill with same ─×44 + font as the POS divider so both end at the same width.
+                _append(mas, "─" * 44 + "\n",
                         {NSFontAttributeName: NSFont.boldSystemFontOfSize_(_sz(15)),
                          NSForegroundColorAttributeName: _ph_bg,
                          NSBackgroundColorAttributeName: _ph_bg,
