@@ -143,12 +143,19 @@ def build_attributed_string(data: dict, font_size: int = 14) -> NSMutableAttribu
     c_xref_hdr  = NSColor.colorWithWhite_alpha_(0.15, 1.0)
     c_xref_word = NSColor.secondaryLabelColor()
 
+    # Measure the exact pixel width of the yellow divider (─×44 at boldFont(15))
+    # so the xref header bar can be set to the identical width via a positive tailIndent.
+    _sep_ref = NSAttributedString.alloc().initWithString_attributes_(
+        "─" * 44,
+        {NSFontAttributeName: NSFont.boldSystemFontOfSize_(_sz(15))})
+    _sep_width = _sep_ref.size().width
+
     def _render_xrefs(synonyms, antonyms, h_indent):
         """Render synonym/antonym sections after examples."""
         for section_label, words in [("同义词", synonyms), ("反义词", antonyms)]:
             if not words:
                 continue
-            # Full-width header row with blue background
+            # Header bar clipped at the exact same width as the ─×44 yellow divider.
             hdr_ps = NSMutableParagraphStyle.alloc().init()
             hdr_ps.setParagraphSpacingBefore_(8.0)
             hdr_ps.setParagraphSpacing_(0.0)
@@ -156,13 +163,12 @@ def build_attributed_string(data: dict, font_size: int = 14) -> NSMutableAttribu
             hdr_ps.setHeadIndent_(h_indent)
             hdr_ps.setFirstLineHeadIndent_(h_indent)
             hdr_ps.setLineBreakMode_(2)   # NSLineBreakByClipping
-            hdr_ps.setTailIndent_(-50.0)
+            hdr_ps.setTailIndent_(_sep_width)   # positive = fixed px from left = same as divider
             _append(mas, " " + section_label,
                     {NSFontAttributeName: f_xref_hdr,
                      NSForegroundColorAttributeName: c_xref_hdr,
                      NSBackgroundColorAttributeName: c_xref_bg,
                      NSParagraphStyleAttributeName: hdr_ps})
-            # Fill remainder with invisible █ (fg=bg) — non-whitespace ensures bg draws to tailIndent
             _append(mas, "█" * 300 + "\n",
                     {NSFontAttributeName: f_xref_hdr,
                      NSForegroundColorAttributeName: c_xref_bg,
@@ -358,8 +364,8 @@ def build_attributed_string(data: dict, font_size: int = 14) -> NSMutableAttribu
                 if notes:
                     _append(mas, "  " + "  ".join(notes),
                             _attrs(f_phrase_g, _ph_fg, ph_para, bg=_ph_bg))
-                # Fill with same ─×44 + font as the POS divider so both end at the same width.
-                _append(mas, "─" * 44 + "\n",
+                # █×44 at the same font as the ─×44 divider → identical total glyph width.
+                _append(mas, "█" * 44 + "\n",
                         {NSFontAttributeName: NSFont.boldSystemFontOfSize_(_sz(15)),
                          NSForegroundColorAttributeName: _ph_bg,
                          NSBackgroundColorAttributeName: _ph_bg,
