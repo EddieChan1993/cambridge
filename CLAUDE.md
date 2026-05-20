@@ -99,6 +99,17 @@ self.settings     = Settings()
 self.data_manager = DataManager(self.settings.sync_data_path)
 ```
 
+### History eviction — LFU
+
+`DataManager.HISTORY_CAP = 1000`. Each entry stores `{word, time, count}`.
+
+- Re-looking up an existing word: removes it from current position, increments `count`, re-inserts at index 0 (most recent first).
+- When cap exceeded: `_lfu_evict()` sorts by `count / (age_seconds + 1)` descending and keeps top 1000. Infrequent + stale entries are evicted first; high-frequency words are retained even if not recently accessed.
+
+### Cache invalidation on URL change
+
+Changing the lookup URL (in preferences or via `resetURL_`) automatically calls `data_manager.clear_cache()`. This ensures the next lookup re-fetches from the new URL rather than returning stale results from the previous language variant.
+
 ## Scraper Data Format
 
 `scrape_cambridge(word, base_url="")` returns:
@@ -252,11 +263,11 @@ Window size: `W=440, H=710`.
 
 - Section 1: 划词查询快捷键 (record button)
 - Section 2: 呼出主界面快捷键 (record button)
-- Section 3: 查询接口地址 — URL field **auto-saves on blur** (`controlTextDidEndEditing_`); 恢复默认 saves immediately.
+- Section 3: 查询接口地址 — URL field saves in three places: blur (`controlTextDidEndEditing_`), 保存 button (`saveSettings_`), and window close (`windowShouldClose_`). Changing URL also clears the cache. 恢复默认 saves immediately.
 - Section 4: 侧边栏默认状态 — checkbox **auto-saves on toggle**.
 - Section 5: 内容字体大小 — slider (10–22pt), continuous, **auto-applies via `applyFontSize` delegate**.
 - Section 6: 数据同步路径 — folder picker (NSOpenPanel), readonly path display field, clear button. Auto-saves and applies immediately via `applySyncPath` delegate. If new dir is empty and local has data → migration alert.
-- Cancel/Save buttons only affect hotkey settings (Sections 1–2).
+- 保存/取消 buttons: 保存 also flushes URL field unconditionally (guards against focus never leaving the field). Only hotkey changes (Sections 1–2) strictly require 保存.
 
 ## Known Pitfalls
 
@@ -268,6 +279,11 @@ Window size: `W=440, H=710`.
 - **Link tooltip suppression**: overriding `setToolTip_` on NSTextView subclass has no effect on link tooltips — NSTextView uses a private `NSToolTipWindow` mechanism. Override `addToolTipRect_owner_userData_` instead (return 0 to block all tooltip rects).
 - **`█` fill chars leave artifacts**: U+2588 FULL BLOCK clipped at `tailIndent` shows a partial yellow rectangle at the boundary. Use `\n`-in-background-run instead.
 - **Settings before DataManager**: `Settings` must be initialised before `DataManager` in `applicationDidFinishLaunching_` so `sync_data_path` is available to the constructor.
+- **`Path | None` type annotation**: requires Python 3.10+. Use `Optional[Path]` from `typing` for Python 3.9 compatibility — py2app will crash at import time otherwise.
+- **`@objc.python_method` in plain Python classes**: only use on methods of `NSObject` subclasses. Applying it to a plain `class DataManager:` causes `NameError: name 'objc' is not defined` at import time.
+- **Scraper fallback chain must not contain alternative language variants**: putting the simplified Chinese URL in `_FALLBACK_URLS` when the user configured traditional Chinese silently overrides their choice when Cambridge redirects. Fallback should only be the English-only URL as last resort.
+- **URL field save only fires on blur (`controlTextDidEndEditing_`)**: if the user clicks 保存 without first clicking elsewhere, the text field never loses focus and the new URL is not saved. Fix: also flush the URL field value explicitly inside `saveSettings_` and `windowShouldClose_`.
+- **Cache survives URL changes**: switching between language variants (simplified ↔ traditional) returns stale translated content from the old URL. Always call `data_manager.clear_cache()` when `lookup_base_url` changes.
 
 ## Global Hotkey — Lessons Learned (hard-won)
 

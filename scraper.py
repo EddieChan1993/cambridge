@@ -9,13 +9,12 @@ from bs4 import BeautifulSoup
 
 _DEFAULT_BASE_URL = (
     "https://dictionary.cambridge.org/zhs/"
-    "%E8%AF%8D%E5%85%B8/%E8%8B%B1%E8%AF%AD-%E6%B1%89%E8%AF%AD-%E7%B9%81%E4%BD%93"
+    "%E8%AF%8D%E5%85%B8/%E8%8B%B1%E8%AF%AD-%E6%B1%89%E8%AF%AD-%E7%AE%80%E4%BD%93"
 )
 
-# Fallback chain: simplified Chinese → English-only
+# Fallback: English-only as last resort. Never put another Chinese variant here —
+# it would silently override the user's configured URL when the primary redirects.
 _FALLBACK_URLS = [
-    "https://dictionary.cambridge.org/zhs/"
-    "%E8%AF%8D%E5%85%B8/%E8%8B%B1%E8%AF%AD-%E6%B1%89%E8%AF%AD-%E7%AE%80%E4%BD%93",
     "https://dictionary.cambridge.org/dictionary/english",
 ]
 

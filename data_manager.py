@@ -122,8 +122,10 @@ class DataManager:
             (h for h in self.history if h["word"].lower() == word.lower()), None
         )
         if existing:
+            self.history.remove(existing)
             existing["time"]  = now
             existing["count"] = existing.get("count", 1) + 1
+            self.history.insert(0, existing)
         else:
             self.history.insert(0, {"word": word, "time": now, "count": 1})
 

@@ -468,6 +468,7 @@ class SettingsWindowController(NSObject):
         from settings import DEFAULT_LOOKUP_URL
         self._url_field.setStringValue_(DEFAULT_LOOKUP_URL)
         self._settings.set_lookup_base_url(DEFAULT_LOOKUP_URL)
+        self._clearCacheOnURLChange()
 
     @objc.IBAction
     def toggleSidebarDefault_(self, sender):
@@ -485,7 +486,15 @@ class SettingsWindowController(NSObject):
             return
         url = self._url_field.stringValue().strip()
         from settings import DEFAULT_LOOKUP_URL
-        self._settings.set_lookup_base_url(url if url else DEFAULT_LOOKUP_URL)
+        new_url = url if url else DEFAULT_LOOKUP_URL
+        if new_url != self._settings.lookup_base_url:
+            self._settings.set_lookup_base_url(new_url)
+            self._clearCacheOnURLChange()
+
+    @objc.python_method
+    def _clearCacheOnURLChange(self):
+        if self._delegate and hasattr(self._delegate, "data_manager"):
+            self._delegate.data_manager.clear_cache()
 
     @objc.IBAction
     def saveSettings_(self, sender):
@@ -500,6 +509,14 @@ class SettingsWindowController(NSObject):
         if self._delegate and hasattr(self._delegate, "applyNewShowWindowHotkey"):
             self._delegate.applyNewShowWindowHotkey(
                 self._pending_show_keycode, self._pending_show_modifiers)
+        # Flush URL field unconditionally — always win over auto-save-on-blur
+        from settings import DEFAULT_LOOKUP_URL
+        url = self._url_field.stringValue().strip()
+        new_url = url if url else DEFAULT_LOOKUP_URL
+        old_url = self._settings.lookup_base_url
+        self._settings.set_lookup_base_url(new_url)
+        if new_url != old_url:
+            self._clearCacheOnURLChange()
         self._window.orderOut_(None)
 
     @objc.IBAction
@@ -552,6 +569,12 @@ class SettingsWindowController(NSObject):
     def windowShouldClose_(self, sender):
         self._stop_recording()
         self._stop_recording_show()
+        from settings import DEFAULT_LOOKUP_URL
+        url = self._url_field.stringValue().strip()
+        new_url = url if url else DEFAULT_LOOKUP_URL
+        if new_url != self._settings.lookup_base_url:
+            self._settings.set_lookup_base_url(new_url)
+            self._clearCacheOnURLChange()
         return True
 
     # ── Public ────────────────────────────────────────────────────────────────
