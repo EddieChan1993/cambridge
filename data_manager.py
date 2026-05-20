@@ -111,7 +111,7 @@ class DataManager:
 
     # ── History ──────────────────────────────────────────────────────────────
 
-    HISTORY_CAP = 200
+    HISTORY_CAP = 1000
 
     def add_history(self, word: str):
         word = word.strip()
