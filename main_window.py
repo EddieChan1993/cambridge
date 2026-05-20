@@ -637,6 +637,15 @@ class MainWindowController(NSObject):
     def clearList_(self, sender):
         if not self._delegate:
             return
+        label = "历史记录" if self._mode == "history" else "收藏"
+        from AppKit import NSAlert
+        alert = NSAlert.alloc().init()
+        alert.setMessageText_(f"确认清空{label}？")
+        alert.setInformativeText_("此操作不可撤销。")
+        alert.addButtonWithTitle_("清空")
+        alert.addButtonWithTitle_("取消")
+        if alert.runModal() != 1000:  # NSAlertFirstButtonReturn
+            return
         dm = self._delegate.data_manager
         if self._mode == "history":
             dm.clear_history()

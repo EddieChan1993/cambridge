@@ -3,6 +3,7 @@ import os
 import shutil
 from datetime import datetime, timedelta
 from pathlib import Path
+from typing import Optional
 
 LOCAL_DIR = Path.home() / ".cambridge_tool"
 CACHE_FILE = LOCAL_DIR / "cache.json"
@@ -12,7 +13,7 @@ CACHE_EXPIRY_DAYS = 7
 class DataManager:
     def __init__(self, sync_dir: str = ""):
         LOCAL_DIR.mkdir(exist_ok=True)
-        self._sync_dir: Path | None = self._resolve_sync_dir(sync_dir)
+        self._sync_dir: Optional[Path] = self._resolve_sync_dir(sync_dir)
         if self._sync_dir:
             self._sync_dir.mkdir(parents=True, exist_ok=True)
         self.history   = self._load(self._history_file,   [])
@@ -50,7 +51,7 @@ class DataManager:
                 shutil.copy2(src, dst)
 
     @staticmethod
-    def _resolve_sync_dir(path: str) -> Path | None:
+    def _resolve_sync_dir(path: str) -> Optional[Path]:
         """Append HotDict subfolder so files don't clutter the cloud root."""
         return (Path(path) / "HotDict") if path else None
 
@@ -110,14 +111,43 @@ class DataManager:
 
     # ── History ──────────────────────────────────────────────────────────────
 
+    HISTORY_CAP = 200
+
     def add_history(self, word: str):
         word = word.strip()
         if not word:
             return
-        self.history = [h for h in self.history if h["word"].lower() != word.lower()]
-        self.history.insert(0, {"word": word, "time": datetime.now().isoformat()})
-        self.history = self.history[:200]
+        now = datetime.now().isoformat()
+        existing = next(
+            (h for h in self.history if h["word"].lower() == word.lower()), None
+        )
+        if existing:
+            existing["time"]  = now
+            existing["count"] = existing.get("count", 1) + 1
+        else:
+            self.history.insert(0, {"word": word, "time": now, "count": 1})
+
+        if len(self.history) > self.HISTORY_CAP:
+            self._lfu_evict()
+
         self._save(self._history_file, self.history)
+
+    def _lfu_evict(self):
+        """Drop entries down to HISTORY_CAP using LFU + LRU tie-break.
+
+        Score = count / (seconds_since_access + 1).
+        Lowest score is evicted first — infrequent AND stale entries go first.
+        """
+        now = datetime.now()
+        def _score(h):
+            try:
+                age = (now - datetime.fromisoformat(h["time"])).total_seconds()
+            except Exception:
+                age = 0
+            return h.get("count", 1) / (age + 1)
+
+        self.history.sort(key=_score, reverse=True)
+        self.history = self.history[:self.HISTORY_CAP]
 
     def get_history(self) -> list:
         return [h["word"] for h in self.history]
