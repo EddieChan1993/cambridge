@@ -198,24 +198,26 @@ content view (full window)
 
 ### Background fill technique (critical)
 
-`NSBackgroundColorAttributeName` with `\n` **in the same attributed run** causes NSLayoutManager to fill the background for the **entire line fragment rect** up to `tailIndent`. This is the reliable way to produce full-width color bars:
+**Reliable approach — use `█` fill chars**: append U+2588 FULL BLOCK characters with `fg = bg = fill_color`, followed by a bare `\n` (no background). The block chars have real glyph width, are not stripped by NSTextView, and are clipped at `tailIndent` by `NSLineBreakByClipping`. Since `fg = bg`, the partial clip at the right boundary is the same color as the bar — visually seamless.
 
 ```python
-# Full-width yellow bar (phrase banner, source bar):
-para.setTailIndent_(-50.0)       # clip 50px from right edge
+para.setTailIndent_(-50.0)
 para.setLineBreakMode_(2)        # NSLineBreakByClipping
-_append(mas, " text content ",   {... NSBackgroundColorAttributeName: color ...})
-_append(mas, "\n",               {... NSBackgroundColorAttributeName: color ...})
-# ↑ \n is IN the background run → fills entire line fragment to tailIndent
+_append(mas, " text content ",  {... NSBackgroundColorAttributeName: color ...})
+_append(mas, "█" * 300,         {NSFontAttributeName: same_font,
+                                  NSForegroundColorAttributeName: color,   # fg = bg
+                                  NSBackgroundColorAttributeName: color,
+                                  NSParagraphStyleAttributeName: para})
+_append(mas, "\n",              {... no NSBackgroundColorAttributeName ...})
 ```
 
-**Do NOT use `█` fill characters**: block chars (U+2588) clip at `tailIndent` but show a partial-character artifact at the right edge (a visible yellow/colored block shape at the boundary).
+**Do NOT rely on `\n`-in-background-run** to fill the line fragment: on macOS 15 (Mac Mini M4) this technique only fills to the last glyph bound — not to `tailIndent`. On macOS 14 it fills the full line fragment. The behavior is macOS-version-dependent and therefore unreliable.
 
-**To limit background to text width only** (e.g. 同义词/反义词 header):
+**To limit background to text width only** (e.g. 同义词/反义词 header — intentionally short):
 ```python
 _append(mas, " 同义词 ",  {... NSBackgroundColorAttributeName: c_xref_bg ...})
 _append(mas, "\n",        {... no NSBackgroundColorAttributeName ...})
-# ↑ \n is NOT in the background run → background stops at last glyph
+# \n NOT in background run → background stops at last glyph (works consistently)
 ```
 
 ### Bars in use
@@ -277,7 +279,7 @@ Window size: `W=440, H=710`.
 - **Status bar click highlight**: `menuWillOpen_` + `cancelTracking()` removes the system highlight; must manually call `setHighlighted_(True)` and schedule reset.
 - **NSTextAlignmentCenter value differs by macOS version**: old AppKit used `NSCenterTextAlignment = 2`; newer macOS unified with UIKit so `NSTextAlignmentCenter = 1`, `NSTextAlignmentRight = 2`. **Never hardcode alignment integers** — always import and use the named constants.
 - **Link tooltip suppression**: overriding `setToolTip_` on NSTextView subclass has no effect on link tooltips — NSTextView uses a private `NSToolTipWindow` mechanism. Override `addToolTipRect_owner_userData_` instead (return 0 to block all tooltip rects).
-- **`█` fill chars leave artifacts**: U+2588 FULL BLOCK clipped at `tailIndent` shows a partial yellow rectangle at the boundary. Use `\n`-in-background-run instead.
+- **`\n`-in-background-run is macOS-version-dependent**: fills full line fragment on macOS 14, but only fills to glyph bounds on macOS 15 (Mac Mini M4). Use `█` fill chars (fg=bg=color) instead for cross-version reliability.
 - **Settings before DataManager**: `Settings` must be initialised before `DataManager` in `applicationDidFinishLaunching_` so `sync_data_path` is available to the constructor.
 - **`Path | None` type annotation**: requires Python 3.10+. Use `Optional[Path]` from `typing` for Python 3.9 compatibility — py2app will crash at import time otherwise.
 - **`@objc.python_method` in plain Python classes**: only use on methods of `NSObject` subclasses. Applying it to a plain `class DataManager:` causes `NameError: name 'objc' is not defined` at import time.

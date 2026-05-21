@@ -300,10 +300,14 @@ def build_attributed_string(data: dict, font_size: int = 14) -> NSMutableAttribu
                      NSForegroundColorAttributeName: _src_fg,
                      NSBackgroundColorAttributeName: _src_bg,
                      NSParagraphStyleAttributeName: _src_ps})
-            _append(mas, "\n",
+            _append(mas, "█" * 300,
                     {NSFontAttributeName: NSFont.systemFontOfSize_(_sz(13)),
                      NSForegroundColorAttributeName: _src_bg,
                      NSBackgroundColorAttributeName: _src_bg,
+                     NSParagraphStyleAttributeName: _src_ps})
+            _append(mas, "\n",
+                    {NSFontAttributeName: NSFont.systemFontOfSize_(_sz(13)),
+                     NSForegroundColorAttributeName: _src_fg,
                      NSParagraphStyleAttributeName: _src_ps})
 
         # POS badge(s) + optional pos-level grammar
@@ -363,12 +367,15 @@ def build_attributed_string(data: dict, font_size: int = 14) -> NSMutableAttribu
                 if notes:
                     _append(mas, "  " + "  ".join(notes),
                             _attrs(f_phrase_g, _ph_fg, ph_para, bg=_ph_bg))
-                # \n inside a background run fills the line fragment cleanly to tailIndent.
-                _append(mas, "\n",
+                # Fill to tailIndent with █ chars (fg=bg=yellow) then bare \n.
+                # The \n-in-background-run technique is macOS-version-dependent;
+                # █ fill is reliable across all versions.
+                _append(mas, "█" * 300,
                         {NSFontAttributeName: f_phrase_g,
-                         NSForegroundColorAttributeName: _ph_fg,
+                         NSForegroundColorAttributeName: _ph_bg,
                          NSBackgroundColorAttributeName: _ph_bg,
                          NSParagraphStyleAttributeName: ph_para})
+                _append(mas, "\n", _attrs(f_phrase_g, _ph_fg, ph_para))
                 if variant:
                     var_para = _para(line=2, before=4, after=2,
                                      head=INDENT, first=INDENT)
