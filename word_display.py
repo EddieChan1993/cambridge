@@ -3,6 +3,7 @@ Reusable word-display widget built from NSScrollView + NSTextView.
 Renders structured dictionary data as an NSAttributedString.
 """
 
+import re
 import objc
 from Foundation import NSMutableAttributedString, NSAttributedString
 from AppKit import (
@@ -67,14 +68,18 @@ def build_attributed_string(data: dict, font_size: int = 14) -> NSMutableAttribu
                  or NSFont.monospacedSystemFontOfSize_weight_(_sz(13), 0.0)
     f_pron_lbl = NSFont.boldSystemFontOfSize_(_sz(10))
     f_pos      = NSFont.boldSystemFontOfSize_(_sz(11))
-    f_num      = NSFont.boldSystemFontOfSize_(_sz(14))
+    f_num      = NSFont.boldSystemFontOfSize_(_sz(15))
     f_en       = NSFont.boldSystemFontOfSize_(_sz(14))
     f_note     = NSFont.systemFontOfSize_(_sz(11))
     f_zh       = NSFont.systemFontOfSize_(_sz(13))
     fm         = NSFontManager.sharedFontManager()
     f_ex_en    = fm.convertFont_toHaveTrait_(
                      NSFont.systemFontOfSize_(_sz(13)), 1)  # italic
-    f_ex_zh    = NSFont.systemFontOfSize_(_sz(12))
+    f_ex_en_hl = fm.convertFont_toHaveTrait_(
+                     NSFont.boldSystemFontOfSize_(_sz(13)), 1)  # bold italic — highlighted word
+    f_ex_zh    = NSFont.systemFontOfSize_(_sz(13))
+    f_gw       = fm.convertFont_toHaveTrait_(
+                     NSFont.systemFontOfSize_(_sz(11)), 1)  # italic guideword
     f_err      = NSFont.systemFontOfSize_(_sz(14))
 
     # ── Colors ───────────────────────────────────────────────────────────────
@@ -86,11 +91,45 @@ def build_attributed_string(data: dict, font_size: int = 14) -> NSMutableAttribu
     c_num      = NSColor.systemBlueColor()
     c_en       = NSColor.labelColor()             # bold black/dark — definition
     c_note     = NSColor.secondaryLabelColor()    # inline gram/label note
-    c_zh       = NSColor.secondaryLabelColor()    # Chinese definition
-    c_ex_en    = NSColor.labelColor()              # example sentence
-    c_ex_zh    = NSColor.secondaryLabelColor()    # example Chinese
+    c_zh       = NSColor.systemTealColor()        # Chinese definition — distinct teal
+    c_ex_en    = NSColor.labelColor()             # example sentence
+    c_ex_zh    = NSColor.systemTealColor()        # example Chinese — same teal as zh
     c_bullet   = NSColor.systemBlueColor()        # example bullet (distinct color)
+    c_gw       = NSColor.systemOrangeColor()      # guideword — orange italic
     c_err      = NSColor.systemRedColor()
+
+    # Circled digits for definition numbering (①②③…)
+    _CIRCLED = "①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳"
+    def _circle(n: int) -> str:
+        return _CIRCLED[n - 1] if 1 <= n <= 20 else f"{n}."
+
+    # ── Keyword highlight helpers ─────────────────────────────────────────────
+    # Base keywords: the headword itself (used in every example).
+    _base_kw = [word] if word else []
+
+    def _make_kw(*extra):
+        """Combine base keywords with phrase-specific extras."""
+        return _base_kw + [e for e in extra if e]
+
+    def _highlight_ex(text: str, kws: list) -> list:
+        """
+        Split *text* into [(chunk, is_highlight), ...] segments.
+        Uses prefix matching (\\bkw) to catch inflected forms: run→runs/running.
+        """
+        if not kws or not text:
+            return [(text, False)]
+        pat = "|".join(r"\b" + re.escape(k) + r"\w*" for k in kws if k)
+        if not pat:
+            return [(text, False)]
+        segs, prev = [], 0
+        for m in re.finditer(pat, text, re.IGNORECASE):
+            if m.start() > prev:
+                segs.append((text[prev:m.start()], False))
+            segs.append((text[m.start():m.end()], True))
+            prev = m.end()
+        if prev < len(text):
+            segs.append((text[prev:], False))
+        return segs or [(text, False)]
 
     INDENT = 22.0
 
@@ -201,8 +240,10 @@ def build_attributed_string(data: dict, font_size: int = 14) -> NSMutableAttribu
                     _append(mas, "  " + "  ".join(suffix_parts), suf_attrs)
                 _append(mas, "\n", _attrs(f_xref_word, c_xref_word, word_para))
 
-    def _render_one_def(defn, num=None, base_indent=0):
+    def _render_one_def(defn, num=None, base_indent=0, kws=None):
         """Render a single definition. num=None means no numbering."""
+        if kws is None:
+            kws = _base_kw
         en        = defn.get("en", "")
         zh        = defn.get("zh", "")
         gram      = defn.get("gram", "")
@@ -214,12 +255,12 @@ def build_attributed_string(data: dict, font_size: int = 14) -> NSMutableAttribu
         antonyms  = defn.get("antonyms", [])
 
         h_indent = base_indent if num is None else base_indent + INDENT
-        def_para = _para(line=3, before=6 if num and num > 1 else 0,
+        def_para = _para(line=3, before=10 if num and num > 1 else 0,
                          after=2, head=h_indent, first=base_indent)
         if num is not None:
-            _append(mas, f"{num}. ", _attrs(f_num, c_num, def_para))
+            _append(mas, f"{_circle(num)} ", _attrs(f_num, c_num, def_para))
         if guideword:
-            _append(mas, f"({guideword})  ", _attrs(f_note, c_note, def_para))
+            _append(mas, f"{guideword}  ", _attrs(f_gw, c_gw, def_para))
         if en:
             _append(mas, en, _attrs(f_en, c_en, def_para))
         note_parts = [p for p in [gram, label] if p]
@@ -243,7 +284,12 @@ def build_attributed_string(data: dict, font_size: int = 14) -> NSMutableAttribu
             ex_para = _para(line=2, after=1,
                             head=h_indent + 14, first=h_indent + 2)
             _append(mas, "• ", _attrs(f_ex_en, c_bullet, ex_para))
-            _append(mas, ex_en + "\n", _attrs(f_ex_en, c_ex_en, ex_para))
+            for chunk, is_hl in _highlight_ex(ex_en, kws):
+                if chunk:
+                    f = f_ex_en_hl if is_hl else f_ex_en
+                    c = c_num      if is_hl else c_ex_en
+                    _append(mas, chunk, _attrs(f, c, ex_para))
+            _append(mas, "\n", _attrs(f_ex_en, c_ex_en, ex_para))
             if ex_zh:
                 ez_para = _para(line=2, after=3,
                                 head=h_indent + 16, first=h_indent + 16)
@@ -252,11 +298,11 @@ def build_attributed_string(data: dict, font_size: int = 14) -> NSMutableAttribu
         if synonyms or antonyms:
             _render_xrefs(synonyms, antonyms, h_indent)
 
-    def _render_defs(defs, base_indent=0):
+    def _render_defs(defs, base_indent=0, kws=None):
         single = len(defs) == 1
         for j, defn in enumerate(defs):
             _render_one_def(defn, num=None if single else j + 1,
-                            base_indent=base_indent)
+                            base_indent=base_indent, kws=kws)
 
     # ── Entries ──────────────────────────────────────────────────────────────
     for i, entry in enumerate(entries):
@@ -381,7 +427,8 @@ def build_attributed_string(data: dict, font_size: int = 14) -> NSMutableAttribu
                                      head=INDENT, first=INDENT)
                     _append(mas, variant + "\n",
                             _attrs(f_note, c_note, var_para))
-                _render_defs(ph_defs, base_indent=INDENT)
+                _render_defs(ph_defs, base_indent=INDENT,
+                             kws=_make_kw(phrase_txt))
 
 
     return mas
