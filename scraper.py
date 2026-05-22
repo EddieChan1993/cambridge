@@ -128,10 +128,32 @@ def scrape_cambridge(word: str, base_url: str = "") -> dict:
             return "https:" + src
         return CAMBRIDGE_ORIGIN + src
 
+    # For multi-word phrases (e.g. "come across"), Cambridge shows the pronunciation
+    # of the component headword ("come") inside the same entry-body__el block.
+    # Only accept a pronunciation if its parent entry's headword matches the full
+    # phrase being looked up — otherwise skip it (no pronunciation is better than wrong).
+    _slug_words = set(slug.replace("-", " ").lower().split())
+    def _ipa_headword_ok(ipa_el) -> bool:
+        entry  = ipa_el.find_parent(class_=lambda c: c and "entry-body__el" in c)
+        idiom  = ipa_el.find_parent(class_=lambda c: c and (
+            "idiom-block" in c or "phrase-block" in c or "dphrase-block" in c))
+        if not entry and not idiom:
+            return False  # orphan IPA (WOTD, sidebar, etc.) — skip
+        if not entry:
+            return True   # idiom/phrase block — accept as-is
+        hw_el = entry.select_one(".hw.dhw") or entry.select_one(".headword") or entry.select_one(".hw")
+        if not hw_el:
+            return True
+        hw_words = set(hw_el.get_text(strip=True).lower().split())
+        # Accept only when the entry headword covers the full slug (not just a component)
+        return hw_words >= _slug_words or _slug_words <= hw_words
+
     seen_pron: set = set()
     for ipa_el in soup.select(".ipa"):
         ipa = ipa_el.get_text(strip=True)
         if not ipa:
+            continue
+        if not _ipa_headword_ok(ipa_el):
             continue
 
         # Walk up to find the dpron-i container (.uk/.us dpron-i)
