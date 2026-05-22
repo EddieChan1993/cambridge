@@ -19,6 +19,9 @@ class DataManager:
         self.history   = self._load(self._history_file,   [])
         self.favorites = self._load(self._favorites_file, {})
         self._cache    = None   # lazy: loaded only on first word lookup
+        # Track file mtimes to detect external changes (e.g. cloud sync from another device)
+        self._history_mtime   = self._mtime(self._history_file)
+        self._favorites_mtime = self._mtime(self._favorites_file)
 
     @property
     def _history_file(self) -> Path:
@@ -62,6 +65,8 @@ class DataManager:
             self._sync_dir.mkdir(parents=True, exist_ok=True)
         self.history   = self._load(self._history_file,   [])
         self.favorites = self._load(self._favorites_file, {})
+        self._history_mtime   = self._mtime(self._history_file)
+        self._favorites_mtime = self._mtime(self._favorites_file)
 
     @property
     def cache(self):
@@ -72,6 +77,14 @@ class DataManager:
     @cache.setter
     def cache(self, value):
         self._cache = value
+
+    @staticmethod
+    def _mtime(path: Path):
+        """Return file mtime float, or None if the file doesn't exist."""
+        try:
+            return path.stat().st_mtime
+        except OSError:
+            return None
 
     def _load(self, path, default):
         try:
@@ -86,8 +99,35 @@ class DataManager:
         try:
             with open(path, "w", encoding="utf-8") as f:
                 json.dump(data, f, ensure_ascii=False, indent=2)
+            # Keep tracked mtime in sync so check_and_reload won't re-read our own write
+            if path == self._history_file:
+                self._history_mtime = self._mtime(path)
+            elif path == self._favorites_file:
+                self._favorites_mtime = self._mtime(path)
         except Exception as e:
             print(f"Save error: {e}")
+
+    def check_and_reload(self) -> tuple:
+        """
+        Compare current file mtimes against stored values.
+        Reload from disk only if changed externally (e.g. cloud sync from another device).
+        Returns (history_changed, favorites_changed).
+        """
+        hist_changed = fav_changed = False
+
+        new_h = self._mtime(self._history_file)
+        if new_h != self._history_mtime:
+            self.history = self._load(self._history_file, [])
+            self._history_mtime = new_h
+            hist_changed = True
+
+        new_f = self._mtime(self._favorites_file)
+        if new_f != self._favorites_mtime:
+            self.favorites = self._load(self._favorites_file, {})
+            self._favorites_mtime = new_f
+            fav_changed = True
+
+        return hist_changed, fav_changed
 
     # ── Cache ────────────────────────────────────────────────────────────────
 

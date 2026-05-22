@@ -10,7 +10,7 @@ import time
 from pathlib import Path
 
 import objc
-from Foundation import NSObject
+from Foundation import NSObject, NSTimer
 from AppKit import (
     NSApplication,
     NSStatusBar,
@@ -115,7 +115,21 @@ class AppDelegate(NSObject):
         self.main_window.refreshList()
         self.main_window.showWindow()
 
+        # ── 云同步文件变化检测（每 3 秒轮询 mtime）───────────────────────────
+        self._sync_timer = NSTimer.scheduledTimerWithTimeInterval_target_selector_userInfo_repeats_(
+            3.0, self, "_pollSyncFiles:", None, True)
+
         self._checkAccessibility()
+
+    # ── 云同步轮询 ────────────────────────────────────────────────────────────
+
+    def _pollSyncFiles_(self, timer):
+        """NSTimer callback — fired every 3 s to detect external file changes."""
+        hist_changed, fav_changed = self.data_manager.check_and_reload()
+        if hist_changed:
+            self.main_window.refreshHistory()
+        if fav_changed:
+            self.main_window.refreshFavorites()
 
     def applicationShouldTerminateAfterLastWindowClosed_(self, app):
         return False
