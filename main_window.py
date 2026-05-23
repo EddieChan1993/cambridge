@@ -38,6 +38,7 @@ from AppKit import (
     NSTextAlignmentLeft,
     NSTextAlignmentCenter,
     NSTextAlignmentRight,
+    NSSpellChecker,
 )
 
 from word_display import make_word_scroll_view, update_word_view
@@ -222,6 +223,162 @@ def _btn(title, target, action, frame):
     return b
 
 
+# ── Autocomplete suggestion panel ─────────────────────────────────────────────
+
+class _SuggestOverlay(NSObject):
+    """Autocomplete dropdown embedded in the main window's content view.
+
+    Avoids separate-window issues in py2app full builds by living as a plain
+    NSView subview of the window's contentView, always on top via re-ordering.
+    """
+
+    ROW_H   = 24
+    MAX_VIS = 8
+
+    def init(self):
+        self = objc.super(_SuggestOverlay, self).init()
+        if self is None:
+            return None
+        self._words    = []
+        self._callback = None
+        self._bg       = None
+        self._tv       = None
+        self._sv       = None
+        return self
+
+    @objc.python_method
+    def attach(self, content_view):
+        """Create the overlay NSView and add it (hidden) to content_view."""
+        from AppKit import NSTextFieldCell
+        bg = NSView.alloc().initWithFrame_(NSMakeRect(0, 0, 300, 200))
+        bg.setWantsLayer_(True)
+        bg.layer().setBackgroundColor_(NSColor.windowBackgroundColor().CGColor())
+        bg.layer().setBorderColor_(NSColor.separatorColor().CGColor())
+        bg.layer().setBorderWidth_(0.5)
+        bg.layer().setCornerRadius_(6.0)
+        bg.setHidden_(True)
+        content_view.addSubview_(bg)
+
+        sv = NSScrollView.alloc().initWithFrame_(NSMakeRect(0, 0, 300, 200))
+        sv.setBorderType_(0)
+        sv.setHasVerticalScroller_(False)
+        sv.setDrawsBackground_(False)
+        bg.addSubview_(sv)
+
+        tv = NSTableView.alloc().initWithFrame_(NSMakeRect(0, 0, 300, 200))
+        tv.setHeaderView_(None)
+        tv.setRowHeight_(self.ROW_H)
+        tv.setGridStyleMask_(0)
+        tv.setIntercellSpacing_(NSMakeSize(0, 0))
+        tv.setSelectionHighlightStyle_(1)
+        tv.setBackgroundColor_(NSColor.windowBackgroundColor())
+        tv.setDataSource_(self)
+        tv.setDelegate_(self)
+        tv.setTarget_(self)
+        tv.setAction_("rowClicked:")
+
+        col = NSTableColumn.alloc().initWithIdentifier_("word")
+        col.setWidth_(296)
+        col.setResizingMask_(1)
+        data_cell = NSTextFieldCell.alloc().init()
+        data_cell.setFont_(NSFont.systemFontOfSize_(13))
+        data_cell.setEditable_(False)
+        data_cell.setSelectable_(False)
+        col.setDataCell_(data_cell)
+        tv.addTableColumn_(col)
+        sv.setDocumentView_(tv)
+
+        self._bg = bg
+        self._tv = tv
+        self._sv = sv
+
+    @objc.python_method
+    def update(self, words, search_field, on_click):
+        """Reposition below search_field and show. Empty words → hide."""
+        if not words or self._bg is None:
+            self.hide()
+            return
+        self._words    = list(words)
+        self._callback = on_click
+
+        content_view = self._bg.superview()
+        n = min(len(words), self.MAX_VIS)
+        w = max(search_field.frame().size.width, 200.0)
+        h = float(n * self.ROW_H + 2)
+
+        # Convert search field origin to content view coordinate space
+        field_in_cv = search_field.convertRect_toView_(search_field.bounds(), content_view)
+        x = field_in_cv.origin.x
+        y = field_in_cv.origin.y - h   # macOS y-up: subtract = visually below
+
+        self._bg.setFrame_(NSMakeRect(x, y, w, h))
+        inner = NSMakeRect(0, 0, w, h)
+        self._sv.setFrame_(inner)
+        self._tv.setFrame_(inner)
+        self._tv.tableColumns()[0].setWidth_(w - 4)
+
+        self._tv.reloadData()
+        self._tv.deselectAll_(None)
+        self._bg.setHidden_(False)
+        # Re-order to front so it draws above all other subviews
+        content_view.addSubview_positioned_relativeTo_(self._bg, 1, None)
+
+    @objc.python_method
+    def hide(self):
+        if self._bg:
+            self._bg.setHidden_(True)
+        self._words    = []
+        self._callback = None
+
+    @objc.python_method
+    def is_visible(self):
+        return bool(self._bg and not self._bg.isHidden())
+
+    @objc.python_method
+    def move_selection(self, delta):
+        n = len(self._words)
+        if not n:
+            return None
+        row = self._tv.selectedRow()
+        new = row + delta
+        if new < -1:
+            new = n - 1
+        elif new >= n:
+            new = -1
+        if new < 0:
+            self._tv.deselectAll_(None)
+            return None
+        idx = NSIndexSet.indexSetWithIndex_(new)
+        self._tv.selectRowIndexes_byExtendingSelection_(idx, False)
+        self._tv.scrollRowToVisible_(new)
+        return self._words[new]
+
+    @objc.python_method
+    def selected_word(self):
+        row = self._tv.selectedRow()
+        if 0 <= row < len(self._words):
+            return self._words[row]
+        return None
+
+    # NSTableViewDataSource — cell-based
+    def numberOfRowsInTableView_(self, tv):
+        return len(self._words)
+
+    def tableView_objectValueForTableColumn_row_(self, tv, col, row):
+        if row < len(self._words):
+            return self._words[row]
+        return ""
+
+    @objc.IBAction
+    def rowClicked_(self, sender):
+        row = sender.selectedRow()
+        if 0 <= row < len(self._words) and self._callback:
+            word = self._words[row]
+            cb   = self._callback
+            self.hide()
+            cb(word)
+
+
 # ── Controller ────────────────────────────────────────────────────────────────
 
 class MainWindowController(NSObject):
@@ -255,6 +412,7 @@ class MainWindowController(NSObject):
         self._search_field   = None
         self._fav_btn      = None
         self._content_tv   = None
+        self._suggest      = None
         self._build()
         return self
 
@@ -537,6 +695,10 @@ class MainWindowController(NSObject):
         self._fav_btn      = fav_btn
         self._content_tv   = tv
 
+        search_field.setDelegate_(self)
+        self._suggest = _SuggestOverlay.alloc().init()
+        self._suggest.attach(self._window.contentView())
+
 
     # ── NSWindowDelegate ──────────────────────────────────────────────────────
 
@@ -546,6 +708,16 @@ class MainWindowController(NSObject):
 
     def windowDidResize_(self, notification):
         self._repositionBottomButtons()
+        if self._suggest:
+            self._suggest.hide()
+
+    def windowDidMove_(self, notification):
+        if self._suggest:
+            self._suggest.hide()
+
+    def windowDidResignKey_(self, notification):
+        if self._suggest:
+            self._suggest.hide()
 
     # ── NSTableViewDataSource ─────────────────────────────────────────────────
 
@@ -616,6 +788,8 @@ class MainWindowController(NSObject):
         if self._sidebar_search is not None and field == self._sidebar_search:
             self._sidebar_filter = self._sidebar_search.stringValue() or ""
             self.refreshList()
+        elif self._search_field is not None and field == self._search_field:
+            self._updateSuggestions_(self._search_field.stringValue() or "")
 
     @objc.python_method
     def _repositionBottomButtons(self):
@@ -693,6 +867,8 @@ class MainWindowController(NSObject):
 
     @objc.IBAction
     def searchEnter_(self, sender):
+        if self._suggest:
+            self._suggest.hide()
         word = (sender.stringValue() or "").strip()
         if word and self._delegate:
             self._delegate.lookupWordInMainWindow_(word)
@@ -701,6 +877,8 @@ class MainWindowController(NSObject):
 
     @objc.IBAction
     def searchBtnClick_(self, sender):
+        if self._suggest:
+            self._suggest.hide()
         word = (self._search_field.stringValue() or "").strip()
         if word and self._delegate:
             self._delegate.lookupWordInMainWindow_(word)
@@ -713,6 +891,86 @@ class MainWindowController(NSObject):
         self._current_data = None
         self._updateFavBtn_(False)
         self._showOverlay("📖", "输入单词开始查询", "支持英文单词 · 划词快捷键 · 历史收藏")
+
+    # ── Autocomplete ──────────────────────────────────────────────────────────
+
+    @objc.python_method
+    def _updateSuggestions_(self, prefix):
+        if not self._suggest or not self._delegate:
+            return
+        prefix = prefix.strip()
+        if len(prefix) < 2:
+            self._suggest.hide()
+            return
+
+        # 系统词典补全（支持任意英语单词）
+        checker     = NSSpellChecker.sharedSpellChecker()
+        completions = checker.completionsForPartialWordRange_inString_language_inSpellDocumentWithTag_(
+            (0, len(prefix)), prefix, "en", 0
+        ) or []
+        prefix_l  = prefix.lower()
+        sys_words = [w for w in completions if w.lower() != prefix_l]
+
+        # 历史/收藏中的匹配词优先置顶
+        dm       = self._delegate.data_manager
+        seen     = set()
+        personal = []
+        for entry in dm.history:
+            w = entry.get("word", "") if isinstance(entry, dict) else str(entry)
+            wl = w.lower()
+            if w and wl.startswith(prefix_l) and wl != prefix_l and w not in seen:
+                seen.add(w)
+                personal.append(w)
+        for w in dm.favorites:
+            wl = w.lower()
+            if w and wl.startswith(prefix_l) and wl != prefix_l and w not in seen:
+                seen.add(w)
+                personal.append(w)
+
+        personal_lower = {w.lower() for w in personal}
+        extra      = [w for w in sys_words if w.lower() not in personal_lower]
+        candidates = (personal + extra)[: self._suggest.MAX_VIS]
+
+        if not candidates:
+            self._suggest.hide()
+            return
+        self._suggest.update(candidates, self._search_field, self._applySuggestion_)
+
+    @objc.python_method
+    def _applySuggestion_(self, word):
+        self._search_field.setStringValue_(word)
+        if self._delegate:
+            self._delegate.lookupWordInMainWindow_(word)
+
+    # NSControlTextEditingDelegate — keyboard navigation in the search field
+    def control_textView_doCommandBySelector_(self, control, tv, sel):
+        if control is not self._search_field:
+            return False
+        if not self._suggest or not self._suggest.is_visible():
+            return False
+        sel_str = str(sel)
+        if sel_str == "moveDown:":
+            word = self._suggest.move_selection(1)
+            if word is not None:
+                self._search_field.setStringValue_(word)
+            return True
+        if sel_str == "moveUp:":
+            word = self._suggest.move_selection(-1)
+            if word is not None:
+                self._search_field.setStringValue_(word)
+            return True
+        if sel_str == "cancelOperation:":   # Escape
+            self._suggest.hide()
+            return True
+        if sel_str in ("insertNewline:", "insertNewlineIgnoringFieldEditor:"):
+            word = self._suggest.selected_word()
+            if word:
+                self._suggest.hide()
+                self._search_field.setStringValue_(word)
+                if self._delegate:
+                    self._delegate.lookupWordInMainWindow_(word)
+                return True
+        return False
 
     @objc.IBAction
     def toggleFavorite_(self, sender):

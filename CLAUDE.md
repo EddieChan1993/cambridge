@@ -194,6 +194,21 @@ content view (full window)
 - **Sidebar search**: `NSSearchField` with `controlTextDidChange_` delegate for real-time filtering. Filter resets when switching tabs.
 - **pron_bar removed** — UK/US audio buttons were removed. Pronunciation is now rendered inline inside the NSTextView (see Word Display below).
 
+## Autocomplete — main_window.py
+
+`_SuggestOverlay` is an `NSObject` that manages an in-window overlay `NSView` (not a separate `NSPanel`). It is attached to the main window's `contentView` so it works identically in dev and full py2app builds.
+
+- **Data source**: `NSSpellChecker.completionsForPartialWordRange_inString_language_inSpellDocumentWithTag_` (system English dictionary, no bundled word list). History/favorites matches are prepended as personalised top results.
+- **Trigger**: `controlTextDidChange_` on the main search field (requires `search_field.setDelegate_(self)` set in `_build()`). Fires when prefix ≥ 2 chars.
+- **Positioning**: `search_field.convertRect_toView_(bounds, content_view)` → subtract overlay height → `NSMakeRect`. Re-orders overlay to front via `content_view.addSubview_positioned_relativeTo_(bg, 1, None)` each update.
+- **Keyboard**: `control_textView_doCommandBySelector_` intercepts `moveDown:` / `moveUp:` (arrow navigation), `cancelOperation:` (Escape = dismiss), `insertNewline:` (Enter = apply selection and search).
+- **Click**: `NSTableView` action `rowClicked_` — hides overlay then calls `_applySuggestion_` callback.
+- **Auto-hide**: `windowDidResize_`, `windowDidMove_`, `windowDidResignKey_`, `searchEnter_`, `searchBtnClick_`.
+
+### Why NSPanel was abandoned for the overlay
+
+`NSPanel` with `NSWindowStyleMaskBorderless | NSWindowStyleMaskNonactivatingPanel` is **invisible in py2app full builds** — `isVisible()` returns `True` but nothing renders. Root cause: borderless non-activating panels behave differently in the packaged app bundle context (different executable signature, different window server session). **Fix**: embed the dropdown as an `NSView` subview of the existing window's `contentView` instead.
+
 ## Word Display — word_display.py
 
 ### Background fill technique (critical)
@@ -286,6 +301,7 @@ Window size: `W=440, H=710`.
 - **Scraper fallback chain must not contain alternative language variants**: putting the simplified Chinese URL in `_FALLBACK_URLS` when the user configured traditional Chinese silently overrides their choice when Cambridge redirects. Fallback should only be the English-only URL as last resort.
 - **URL field save only fires on blur (`controlTextDidEndEditing_`)**: if the user clicks 保存 without first clicking elsewhere, the text field never loses focus and the new URL is not saved. Fix: also flush the URL field value explicitly inside `saveSettings_` and `windowShouldClose_`.
 - **Cache survives URL changes**: switching between language variants (simplified ↔ traditional) returns stale translated content from the old URL. Always call `data_manager.clear_cache()` when `lookup_base_url` changes.
+- **NSPanel invisible in py2app full builds**: borderless non-activating `NSPanel` reports `isVisible() = True` but renders nothing after py2app packaging. Use an in-window `NSView` overlay instead (see `_SuggestOverlay` in `main_window.py`).
 
 ## Global Hotkey — Lessons Learned (hard-won)
 
