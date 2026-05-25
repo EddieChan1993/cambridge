@@ -69,6 +69,15 @@ class AppDelegate(NSObject):
 
         # ── 右键菜单 ────────────────────────────────────────────────────────
         menu = NSMenu.alloc().init()
+        menu.setDelegate_(self)
+
+        # 缓存占用信息（每次菜单打开时在 menuWillOpen_ 中刷新）
+        self._item_stats = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
+            "", None, "")
+        self._item_stats.setEnabled_(False)
+        menu.addItem_(self._item_stats)
+
+        menu.addItem_(NSMenuItem.separatorItem())
 
         item_prefs = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
             "偏好设置…", "openSettings:", "")
@@ -130,6 +139,31 @@ class AppDelegate(NSObject):
             self.main_window.refreshHistory()
         if fav_changed:
             self.main_window.refreshFavorites()
+
+    # ── NSMenuDelegate ────────────────────────────────────────────────────────
+
+    def menuWillOpen_(self, menu):
+        """Refresh cache stats every time the status-bar menu opens."""
+        dm = self.data_manager
+
+        word_count  = len(dm.cache)
+        audio_bytes = sum(len(v) for v in dm.audio_cache.values())
+        hist_count  = len(dm.history)
+        fav_count   = len(dm.favorites)
+
+        def _fmt(b):
+            if b < 1024:
+                return f"{b} B"
+            if b < 1024 * 1024:
+                return f"{b / 1024:.0f} KB"
+            return f"{b / 1024 / 1024:.1f} MB"
+
+        title = (
+            f"词条缓存 {word_count} 条"
+            f"  ·  音频 {_fmt(audio_bytes)}\n"
+            f"历史 {hist_count} 条  ·  收藏 {fav_count} 个"
+        )
+        self._item_stats.setTitle_(title)
 
     def applicationShouldTerminateAfterLastWindowClosed_(self, app):
         return False
