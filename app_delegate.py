@@ -157,7 +157,7 @@ class AppDelegate(NSObject):
             return f"{b / 1024 / 1024:.1f} MB"
 
         self._item_stats.setTitle_(
-            f"词条缓存 {word_count} 条  ·  音频 {_fmt(audio_bytes)}"
+            f"缓存 {word_count} 条  ·  音频 {_fmt(audio_bytes)}"
         )
 
     def applicationShouldTerminateAfterLastWindowClosed_(self, app):
