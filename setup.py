@@ -4,7 +4,12 @@ Usage:  python setup.py py2app
 """
 
 import os
+import sys
 from setuptools import setup
+
+# modulegraph's AST visitor hits Python's default recursion limit (1000)
+# on complex dependency trees — raise it before py2app scans modules.
+sys.setrecursionlimit(5000)
 
 APP = ["main.py"]
 

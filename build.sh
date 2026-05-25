@@ -181,8 +181,7 @@ else
     else
         printf "\r  \033[31m✗\033[0m  Building (full / distributable)…  \033[31mfailed\033[0m (%ds)\n" "$_ELAPSED"
         echo ""; echo "── build log ──"
-        grep -iE "(error|warning|exception|traceback)" "$BUILD_LOG" \
-            | grep -v "DeprecatedInstaller\|fetch_build_eggs\|setuptools" || cat "$BUILD_LOG"
+        cat "$BUILD_LOG"
         exit 1
     fi
 
@@ -190,13 +189,13 @@ else
     printf "  \033[32m✅  dist/HotDict.app\033[0m  (drag to /Applications to install)\n\n"
 
     # Reset TCC permissions so macOS re-prompts for the new binary's signature.
-    # Required because each full build produces a new binary with a different
-    # code signature — previously granted Accessibility/Input Monitoring permissions
-    # are silently invalidated and must be re-granted after every build.
     tccutil reset Accessibility com.local.hotdict 2>/dev/null || true
     tccutil reset ListenEvent   com.local.hotdict 2>/dev/null || true
     printf "  \033[33m⚠️  权限已重置\033[0m — 启动后需重新授予以下两项权限，快捷键才能生效：\n"
     printf "       1. 辅助功能（启动时自动弹窗，直接授权）\n"
     printf "       2. 输入监控（系统设置 → 隐私与安全性 → 输入监控 → 手动开启）\n\n"
+    printf "  \033[90m如需手动重置权限，可执行：\033[0m\n"
+    printf "  \033[90m  tccutil reset Accessibility com.local.hotdict\033[0m\n"
+    printf "  \033[90m  tccutil reset ListenEvent   com.local.hotdict\033[0m\n\n"
     open "$SCRIPT_DIR/dist/HotDict.app"
 fi
