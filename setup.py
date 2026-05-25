@@ -53,9 +53,15 @@ OPTIONS = {
         "settings_window",
         "utils",
     ],
-    "excludes": ["tkinter", "PyQt5", "PyQt6", "wx", "playwright"],
+    "excludes": [
+        "tkinter", "PyQt5", "PyQt6", "wx", "playwright",
+        "torch", "torchaudio", "torchcodec", "torchgen",
+        "numpy", "pandas", "scipy", "sympy", "matplotlib",
+        "pyarrow", "numba", "pydantic", "networkx",
+        "sklearn", "PIL", "cv2", "IPython", "jupyter",
+    ],
     "semi_standalone": False,
-    "site_packages": True,
+    "site_packages": False,
 }
 
 setup(
