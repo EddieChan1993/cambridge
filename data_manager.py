@@ -19,6 +19,8 @@ class DataManager:
         self.history   = self._load(self._history_file,   [])
         self.favorites = self._load(self._favorites_file, {})
         self._cache    = None   # lazy: loaded only on first word lookup
+        # word_key → [audio_urls]: lets us evict audio when its word expires/is removed
+        self._audio_url_map: dict = {}
         # Track file mtimes to detect external changes (e.g. cloud sync from another device)
         self._history_mtime   = self._mtime(self._history_file)
         self._favorites_mtime = self._mtime(self._favorites_file)
@@ -135,6 +137,11 @@ class DataManager:
 
     # ── Cache ────────────────────────────────────────────────────────────────
 
+    def _evict_audio(self, key: str):
+        """Remove audio cache entries that belong to the given word key."""
+        for url in self._audio_url_map.pop(key, []):
+            self.audio_cache.pop(url, None)
+
     def get_cached(self, word: str):
         key = word.lower().strip()
         entry = self.cache.get(key)
@@ -146,11 +153,16 @@ class DataManager:
             except Exception:
                 pass
             del self.cache[key]
+            self._evict_audio(key)   # word expired → evict its audio too
         return None
 
     def set_cached(self, word: str, data: dict):
         key = word.lower().strip()
         self.cache[key] = {"cached_at": datetime.now().isoformat(), "data": data}
+        # Record which audio URLs belong to this word so they can be evicted together
+        urls = [p["audio"] for p in data.get("pronunciations", []) if p.get("audio")]
+        if urls:
+            self._audio_url_map[key] = urls
         self._save(CACHE_FILE, self.cache)
 
     # ── History ──────────────────────────────────────────────────────────────
@@ -213,12 +225,14 @@ class DataManager:
         key = word.lower().strip()
         if key in self.cache:
             del self.cache[key]
+            self._evict_audio(key)   # remove its audio too
             self._save(CACHE_FILE, self.cache)
 
     def clear_cache(self):
         self.cache = {}
+        self._audio_url_map.clear()
+        DataManager.audio_cache.clear()
         self._save(CACHE_FILE, self.cache)
-        DataManager.audio_cache.clear()   # 音频缓存与词条缓存同周期
 
     def put_audio_cache(self, url: str, data: bytes):
         """Insert into audio cache, evicting oldest entry when over limit.
