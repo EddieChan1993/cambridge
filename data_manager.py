@@ -78,6 +78,10 @@ class DataManager:
     def cache(self, value):
         self._cache = value
 
+    # In-memory audio cache: URL → MP3 bytes.
+    # Bounded to cached_word_count × 2 (UK + US per word), cleared with word cache.
+    audio_cache: dict = {}
+
     @staticmethod
     def _mtime(path: Path):
         """Return file mtime float, or None if the file doesn't exist."""
@@ -214,6 +218,19 @@ class DataManager:
     def clear_cache(self):
         self.cache = {}
         self._save(CACHE_FILE, self.cache)
+        DataManager.audio_cache.clear()   # 音频缓存与词条缓存同周期
+
+    def put_audio_cache(self, url: str, data: bytes):
+        """Insert into audio cache, evicting oldest entry when over limit.
+        Limit = current cached word count × 2 (UK + US), minimum 20.
+        """
+        ac = DataManager.audio_cache
+        if url in ac:
+            return
+        limit = max(20, len(self.cache) * 2)
+        if len(ac) >= limit:
+            ac.pop(next(iter(ac)))   # evict oldest (FIFO)
+        ac[url] = data
 
     def remove_history(self, word: str):
         self.history = [h for h in self.history if h["word"].lower() != word.lower()]

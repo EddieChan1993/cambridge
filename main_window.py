@@ -1074,6 +1074,7 @@ class MainWindowController(NSObject):
             self._hideOverlay()
             fs = self._delegate.settings.font_size if self._delegate else 14
             update_word_view(self._content_tv, data, fs)
+            self._prefetchAudio(data)   # pre-download audio so clicks are instant
         if self._delegate and self._current_word:
             is_fav = self._delegate.data_manager.is_favorite(self._current_word)
             self._updateFavBtn_(is_fav)
@@ -1118,32 +1119,76 @@ class MainWindowController(NSObject):
 
     # ── 发音播放 ──────────────────────────────────────────────────────────────
 
+    _AUDIO_HEADERS = {
+        "User-Agent": (
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/120.0.0.0 Safari/537.36"
+        ),
+        "Referer": "https://dictionary.cambridge.org/",
+        "Accept": "audio/mpeg,audio/*;q=0.9,*/*;q=0.8",
+    }
+
     @objc.python_method
     def _playAudio_(self, url: str):
+        """Play audio from URL. Uses DataManager.audio_cache to skip re-downloading."""
         if not url:
             return
+        dm = self._delegate.data_manager if self._delegate else None
         import threading, subprocess, tempfile, os, requests as _req
-        def _run():
+        ac = dm.audio_cache if dm else {}
+
+        def _play(data: bytes):
             try:
-                headers = {
-                    "User-Agent": (
-                        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-                        "AppleWebKit/537.36 (KHTML, like Gecko) "
-                        "Chrome/120.0.0.0 Safari/537.36"
-                    ),
-                    "Referer": "https://dictionary.cambridge.org/",
-                    "Accept": "audio/mpeg,audio/*;q=0.9,*/*;q=0.8",
-                }
-                r = _req.get(url, headers=headers, timeout=10)
-                r.raise_for_status()
                 with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as f:
-                    f.write(r.content)
+                    f.write(data)
                     tmp = f.name
                 subprocess.run(["afplay", tmp], check=False)
                 os.unlink(tmp)
             except Exception as e:
+                print(f"[Audio] play error: {e}")
+
+        def _run():
+            try:
+                if url in ac:
+                    _play(ac[url])
+                    return
+                r = _req.get(url, headers=self._AUDIO_HEADERS, timeout=10)
+                r.raise_for_status()
+                if dm:
+                    dm.put_audio_cache(url, r.content)
+                _play(ac[url])
+            except Exception as e:
                 print(f"[Audio] {e}")
+
         threading.Thread(target=_run, daemon=True).start()
+
+    @objc.python_method
+    def _prefetchAudio(self, data: dict):
+        """Pre-download pronunciation audio into DataManager.audio_cache."""
+        dm = self._delegate.data_manager if self._delegate else None
+        if not dm:
+            return
+        import threading, requests as _req
+        ac = dm.audio_cache
+        urls = [
+            p.get("audio", "")
+            for p in (data or {}).get("pronunciations", [])
+            if p.get("audio") and p["audio"] not in ac
+        ]
+        if not urls:
+            return
+
+        def _fetch(url):
+            try:
+                r = _req.get(url, headers=self._AUDIO_HEADERS, timeout=10)
+                if r.ok:
+                    dm.put_audio_cache(url, r.content)
+            except Exception:
+                pass
+
+        for url in urls:
+            threading.Thread(target=_fetch, args=(url,), daemon=True).start()
 
     @objc.python_method
     def showWindow(self):

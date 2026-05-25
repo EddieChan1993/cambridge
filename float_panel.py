@@ -219,6 +219,7 @@ class FloatPanel(NSObject):
         word = data.get("word", "")
         self._word_label.setStringValue_(word)
         update_word_view(self._tv, data)
+        self._prefetchAudio(data)   # pre-download audio so clicks are instant
 
         if self._delegate and hasattr(self._delegate, "data_manager"):
             is_fav = self._delegate.data_manager.is_favorite(word)
@@ -245,22 +246,66 @@ class FloatPanel(NSObject):
 
     @objc.python_method
     def _playAudio_(self, url: str):
+        """Play audio — uses DataManager.audio_cache shared with main window."""
         if not url:
             return
-        import threading, subprocess, tempfile, os, urllib.request
-        def _run():
+        from main_window import MainWindowController
+        dm = self._delegate.data_manager if self._delegate else None
+        import threading, subprocess, tempfile, os, requests as _req
+        ac = dm.audio_cache if dm else {}
+
+        def _play(data: bytes):
             try:
-                req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-                with urllib.request.urlopen(req, timeout=10) as r:
-                    data = r.read()
                 with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as f:
                     f.write(data)
                     tmp = f.name
                 subprocess.run(["afplay", tmp], check=False)
                 os.unlink(tmp)
             except Exception as e:
+                print(f"[Audio] play error: {e}")
+
+        def _run():
+            try:
+                if url in ac:
+                    _play(ac[url])
+                    return
+                r = _req.get(url, headers=MainWindowController._AUDIO_HEADERS, timeout=10)
+                r.raise_for_status()
+                if dm:
+                    dm.put_audio_cache(url, r.content)
+                _play(ac[url])
+            except Exception as e:
                 print(f"[Audio] {e}")
+
         threading.Thread(target=_run, daemon=True).start()
+
+    @objc.python_method
+    def _prefetchAudio(self, data: dict):
+        """Pre-download pronunciation audio into DataManager.audio_cache."""
+        from main_window import MainWindowController
+        dm = self._delegate.data_manager if self._delegate else None
+        if not dm:
+            return
+        import threading, requests as _req
+        ac = dm.audio_cache
+        urls = [
+            p.get("audio", "")
+            for p in (data or {}).get("pronunciations", [])
+            if p.get("audio") and p["audio"] not in ac
+        ]
+        if not urls:
+            return
+
+        def _fetch(url):
+            try:
+                r = _req.get(url, headers=MainWindowController._AUDIO_HEADERS, timeout=10)
+                if r.ok:
+                    dm.put_audio_cache(url, r.content)
+            except Exception:
+                pass
+
+        for url in urls:
+            threading.Thread(target=_fetch, args=(url,), daemon=True).start()
 
     # ── Actions ───────────────────────────────────────────────────────────────
 
