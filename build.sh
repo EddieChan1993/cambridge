@@ -159,6 +159,9 @@ if $DEV_MODE; then
 
     echo "  ──────────────────────────────────────────"
     printf "  \033[32m✅  dist/HotDict.app\033[0m  (dev build · local only)\n\n"
+    printf "  \033[90m如需手动重置权限，可执行：\033[0m\n"
+    printf "  \033[90m  tccutil reset Accessibility com.local.hotdict\033[0m\n"
+    printf "  \033[90m  tccutil reset ListenEvent   com.local.hotdict\033[0m\n\n"
     open "$SCRIPT_DIR/dist/HotDict.app"
 else
     _step "Cleaning previous build…"
