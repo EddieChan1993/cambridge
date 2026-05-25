@@ -148,8 +148,6 @@ class AppDelegate(NSObject):
 
         word_count  = len(dm.cache)
         audio_bytes = sum(len(v) for v in dm.audio_cache.values())
-        hist_count  = len(dm.history)
-        fav_count   = len(dm.favorites)
 
         def _fmt(b):
             if b < 1024:
@@ -158,12 +156,9 @@ class AppDelegate(NSObject):
                 return f"{b / 1024:.0f} KB"
             return f"{b / 1024 / 1024:.1f} MB"
 
-        title = (
-            f"词条缓存 {word_count} 条"
-            f"  ·  音频 {_fmt(audio_bytes)}\n"
-            f"历史 {hist_count} 条  ·  收藏 {fav_count} 个"
+        self._item_stats.setTitle_(
+            f"词条缓存 {word_count} 条  ·  音频 {_fmt(audio_bytes)}"
         )
-        self._item_stats.setTitle_(title)
 
     def applicationShouldTerminateAfterLastWindowClosed_(self, app):
         return False
