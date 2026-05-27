@@ -163,6 +163,18 @@ def scrape_cambridge(word: str, base_url: str = "") -> dict:
         if len(result["pronunciations"]) >= 2:   # 最多 UK + US
             break
 
+    # ── 页面实际 headword（修正用户查询与页面词条不一致的情况）─────────────────
+    # Cambridge may redirect the query (e.g. "feel like") to a page whose
+    # headword is different from the search term. Always use the page's
+    # actual headword so the app doesn't show a misleading word heading.
+    page_hw_el = (soup.select_one(".headword.dhw")
+                  or soup.select_one(".hw.dhw")
+                  or soup.select_one(".di-title .hw"))
+    if page_hw_el:
+        hw_raw = _text(page_hw_el)
+        if hw_raw:
+            result["word"] = hw_raw
+
     # ── 词条 ──────────────────────────────────────────────────────────────────
     # Collect entry-body__el and top-level phrase-di-blocks in DOM order.
     # phrase-di-blocks sit directly in di-body alongside .entry containers,
