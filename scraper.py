@@ -116,7 +116,9 @@ def scrape_cambridge(word: str, base_url: str = "") -> dict:
         return result
 
     # ── 音标 ──────────────────────────────────────────────────────────────────
-    # 直接找所有 .ipa 元素，再向上找最近的 region 标签
+    # 直接迭代 .dpron-i 容器（每个对应一个 UK/US 发音块），避免从 .ipa 反向
+    # 找父级时因找不到 .dpron-i 而退回整页搜索，从而抓到页面其他词条（如
+    # sidebar）的音标。"take care of" 等短语页面本身无 .dpron-i，正确返回空。
     CAMBRIDGE_ORIGIN = "https://dictionary.cambridge.org"
 
     def _abs(src: str) -> str:
@@ -129,31 +131,24 @@ def scrape_cambridge(word: str, base_url: str = "") -> dict:
         return CAMBRIDGE_ORIGIN + src
 
     seen_pron: set = set()
-    for ipa_el in soup.select(".ipa"):
+    for dpron in soup.select(".dpron-i"):
+        ipa_el = dpron.select_one(".ipa")
+        if not ipa_el:
+            continue
         ipa = ipa_el.get_text(strip=True)
         if not ipa:
             continue
 
-        # Walk up to find the dpron-i container (.uk/.us dpron-i)
-        region = ""
-        audio_url = ""
-        container = ipa_el.parent
-        while container and container.name not in ("body", None):
-            if "dpron-i" in (container.get("class") or []):
-                break
-            container = container.parent
+        region_el = dpron.find(class_=re.compile(r"\bdreg\b"))
+        region = _text(region_el) if region_el else ""
 
-        if container:
-            region_el = container.find(class_=re.compile(r"\bdreg\b"))
-            if region_el:
-                region = _text(region_el)
-            # Prefer mpeg source inside .daud
-            daud = container.find(class_="daud")
-            if daud:
-                src_el = daud.select_one('audio source[type="audio/mpeg"]')
-                if not src_el:
-                    src_el = daud.find("source")
-                audio_url = _abs(src_el.get("src", "")) if src_el else ""
+        audio_url = ""
+        daud = dpron.find(class_="daud")
+        if daud:
+            src_el = daud.select_one('audio source[type="audio/mpeg"]')
+            if not src_el:
+                src_el = daud.find("source")
+            audio_url = _abs(src_el.get("src", "")) if src_el else ""
 
         key = (region.lower(), ipa)
         if key in seen_pron:
