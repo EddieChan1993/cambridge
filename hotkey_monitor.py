@@ -1,3 +1,5 @@
+# Copyright © 2026 EddieChan1993. All rights reserved.
+# Unauthorized commercial use is strictly prohibited.
 """
 Global hotkey monitor — CGEventTap with NSEvent global monitor fallback.
 Plain Python class (no NSObject) to avoid PyObjC init-method pitfalls.

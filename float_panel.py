@@ -1,3 +1,5 @@
+# Copyright © 2026 EddieChan1993. All rights reserved.
+# Unauthorized commercial use is strictly prohibited.
 """
 Floating lookup panel (NSPanel) that appears on the left side of the screen.
 

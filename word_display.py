@@ -1,3 +1,5 @@
+# Copyright © 2026 EddieChan1993. All rights reserved.
+# Unauthorized commercial use is strictly prohibited.
 """
 Reusable word-display widget built from NSScrollView + NSTextView.
 Renders structured dictionary data as an NSAttributedString.

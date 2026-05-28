@@ -1,3 +1,5 @@
+# Copyright © 2026 EddieChan1993. All rights reserved.
+# Unauthorized commercial use is strictly prohibited.
 """
 py2app build configuration.
 Usage:  python setup.py py2app

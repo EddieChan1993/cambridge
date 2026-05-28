@@ -1,3 +1,5 @@
+# Copyright © 2026 EddieChan1993. All rights reserved.
+# Unauthorized commercial use is strictly prohibited.
 """
 NSApplicationDelegate — wires together the menu bar, hotkey, lookup pipeline
 and the two windows (main + float panel).

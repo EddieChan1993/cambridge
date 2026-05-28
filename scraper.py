@@ -1,3 +1,5 @@
+# Copyright © 2026 EddieChan1993. All rights reserved.
+# Unauthorized commercial use is strictly prohibited.
 """
 Cambridge Dictionary scraper — requests + BeautifulSoup4.
 URL: https://dictionary.cambridge.org/zhs/词典/英语-汉语-繁体/{word}
