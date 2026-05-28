@@ -152,6 +152,25 @@ Changing the lookup URL (in preferences or via `resetURL_`) automatically calls 
 }
 ```
 
+### Pronunciation scraping — critical note
+
+**Always iterate `.dpron-i` containers directly**, never `soup.select(".ipa")` globally.
+
+Global `.ipa` scan causes two bugs:
+1. Picks up IPA from unrelated page sections (e.g. sidebar widgets) when no `.dpron-i` ancestor exists.
+2. When `.dpron-i` is not found, the ancestor walk exits at `body`, causing `.daud` search to span the entire document and grab wrong audio URLs.
+
+Correct pattern:
+```python
+for dpron in soup.select(".dpron-i"):
+    ipa_el = dpron.select_one(".ipa")
+    region_el = dpron.find(class_=re.compile(r"\bdreg\b"))
+    daud = dpron.find(class_="daud")
+    ...
+```
+
+Phrase/idiom pages (e.g. "take care of") have zero `.dpron-i` elements → `pronunciations: []` is correct.
+
 ### Scraper DOM notes
 - **DOM order**: POS entries are collected in page order by walking `.di-body` children directly; this preserves the source order including `phrase-di-block` entries.
 - **phrase-di-block**: entries like `-rich` sit inside `.di-body` as siblings of `.entry`, not nested inside `.entry-body__el`. Detected via class `phrase-di-block` / `dphrase-di-block`.
@@ -285,6 +304,14 @@ Window size: `W=440, H=710`.
 - Section 5: 内容字体大小 — slider (10–22pt), continuous, **auto-applies via `applyFontSize` delegate**.
 - Section 6: 数据同步路径 — folder picker (NSOpenPanel), readonly path display field, clear button. Auto-saves and applies immediately via `applySyncPath` delegate. If new dir is empty and local has data → migration alert.
 - 保存/取消 buttons: 保存 also flushes URL field unconditionally (guards against focus never leaving the field). Only hotkey changes (Sections 1–2) strictly require 保存.
+
+## 变更记录
+
+### 2026-05-28
+- 🐛 修复：音标抓取 bug——将 `soup.select(".ipa")` 全页扫描改为直接迭代 `.dpron-i` 容器，彻底解决短语词条（如"take care of"）错误显示无关词（horse/hoarse）音标 `/hɔːs/` `/hɔːrs/` 的问题
+- ♻️ 回退：强制撤销破坏 Python 语法的 commit（dbd4b52 将 `\n`/`\\`/`\r` 转义符转为字面字符，导致 5 个文件语法错误），通过 `git reset --hard + force push` 恢复干净状态
+
+---
 
 ## Known Pitfalls
 
