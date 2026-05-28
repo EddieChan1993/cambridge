@@ -310,6 +310,8 @@ Window size: `W=440, H=710`.
 ### 2026-05-28
 - 🐛 修复：音标抓取 bug——将 `soup.select(".ipa")` 全页扫描改为直接迭代 `.dpron-i` 容器，彻底解决短语词条（如"take care of"）错误显示无关词（horse/hoarse）音标 `/hɔːs/` `/hɔːrs/` 的问题
 - ♻️ 回退：强制撤销破坏 Python 语法的 commit（dbd4b52 将 `\n`/`\\`/`\r` 转义符转为字面字符，导致 5 个文件语法错误），通过 `git reset --hard + force push` 恢复干净状态
+- 🐛 修复：例句文本提取改用 `sep=""` 避免 `<b>` 包裹单词部分字符时（如 `mak<b>ing</b>`）插入空格导致 "mak ing" 断词显示
+- 🐛 修复：新增 `_def_gram()` 辅助函数，排除位于 `.examp` 内的语法标签作为 definition 级别 gram；将例句内的 `.gram.dgram`（如 `[ + -ing verb ]`）正确提取并显示在对应例句行前
 
 ---
 

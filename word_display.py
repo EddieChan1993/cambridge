@@ -279,11 +279,14 @@ def build_attributed_string(data: dict, font_size: int = 14) -> NSMutableAttribu
             _append(mas, zh + "\n", _attrs(f_zh, c_zh, zh_para))
 
         for ex in exs:
-            ex_en = ex.get("en", "") if isinstance(ex, dict) else ex
-            ex_zh = ex.get("zh", "") if isinstance(ex, dict) else ""
+            ex_en   = ex.get("en", "") if isinstance(ex, dict) else ex
+            ex_zh   = ex.get("zh", "") if isinstance(ex, dict) else ""
+            ex_gram = ex.get("gram", "") if isinstance(ex, dict) else ""
             ex_para = _para(line=2, after=1,
                             head=h_indent + 14, first=h_indent + 2)
             _append(mas, "• ", _attrs(f_ex_en, c_bullet, ex_para))
+            if ex_gram:
+                _append(mas, ex_gram + " ", _attrs(f_note, c_note, ex_para))
             for chunk, is_hl in _highlight_ex(ex_en, kws):
                 if chunk:
                     f = f_ex_en_hl if is_hl else f_ex_en

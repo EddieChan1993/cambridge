@@ -74,6 +74,14 @@ def _text(el, sep=" ") -> str:
     return text
 
 
+def _def_gram(db) -> str:
+    """Get definition-level gram tag, ignoring gram tags inside .examp elements."""
+    for gram_el in db.select(".gram.dgram"):
+        if not gram_el.find_parent(class_=re.compile(r"\bexamp\b")):
+            return _text(gram_el)
+    return ""
+
+
 def _fetch(url: str) -> tuple:
     """Fetch URL, return (response, soup) or raise RequestException."""
     resp = requests.get(url, headers=HEADERS, timeout=15)
@@ -248,17 +256,19 @@ def scrape_cambridge(word: str, base_url: str = "") -> dict:
                 def_el = db.select_one(".def.ddef_d") or db.select_one(".def")
                 en = _text(def_el).rstrip(":")
                 zh = _def_trans(db)
-                gram2   = _text(db.select_one(".gram.dgram"))
+                gram2   = _def_gram(db)
                 label2  = _text(db.select_one(".lab.dlab"))
                 usage2  = _text(db.select_one(".usage.dusage"))
                 examples = []
                 for ex_el in db.select(".examp.dexamp")[:3]:
                     eg = ex_el.select_one(".eg.deg") or ex_el.select_one(".eg")
-                    en_text = _text(eg) if eg else ""
+                    en_text = _text(eg, sep="") if eg else ""
                     if not en_text:
                         continue
                     ex_trans = ex_el.select_one(".trans.dtrans") or ex_el.select_one(".trans")
-                    examples.append({"en": en_text, "zh": _text(ex_trans) if ex_trans else ""})
+                    ex_gram_el = ex_el.select_one(".gram.dgram")
+                    ex_gram = _text(ex_gram_el) if ex_gram_el else ""
+                    examples.append({"en": en_text, "zh": _text(ex_trans) if ex_trans else "", "gram": ex_gram})
                 if en or zh:
                     xrefs = _parse_xrefs(db)
                     ph_defs.append({"en": en, "zh": zh, "gram": gram2,
@@ -280,8 +290,7 @@ def scrape_cambridge(word: str, base_url: str = "") -> dict:
                 def_el = db.select_one(".def.ddef_d") or db.select_one(".def")
                 en = _text(def_el).rstrip(":")
                 zh = _def_trans(db)
-                gram_el = db.select_one(".gram.dgram")
-                gram    = _text(gram_el) if gram_el else ""
+                gram    = _def_gram(db)
                 lab_el  = db.select_one(".lab.dlab")
                 label   = _text(lab_el) if lab_el else ""
                 gc_el   = db.select_one(".usage.dusage")
@@ -289,11 +298,13 @@ def scrape_cambridge(word: str, base_url: str = "") -> dict:
                 examples = []
                 for ex_el in db.select(".examp.dexamp")[:3]:
                     eg = ex_el.select_one(".eg.deg") or ex_el.select_one(".eg")
-                    en_text = _text(eg) if eg else ""
+                    en_text = _text(eg, sep="") if eg else ""
                     if not en_text:
                         continue
                     ex_trans = ex_el.select_one(".trans.dtrans") or ex_el.select_one(".trans")
-                    examples.append({"en": en_text, "zh": _text(ex_trans) if ex_trans else ""})
+                    ex_gram_el = ex_el.select_one(".gram.dgram")
+                    ex_gram = _text(ex_gram_el) if ex_gram_el else ""
+                    examples.append({"en": en_text, "zh": _text(ex_trans) if ex_trans else "", "gram": ex_gram})
                 if en or zh:
                     xrefs = _parse_xrefs(db)
                     definitions.append({
@@ -326,8 +337,7 @@ def scrape_cambridge(word: str, base_url: str = "") -> dict:
                         def_el = db.select_one(".def.ddef_d") or db.select_one(".def")
                         en = _text(def_el).rstrip(":")
                         zh = _def_trans(db)
-                        gram_el = db.select_one(".gram.dgram")
-                        gram    = _text(gram_el) if gram_el else ""
+                        gram    = _def_gram(db)
                         lab_el  = db.select_one(".lab.dlab")
                         label   = _text(lab_el) if lab_el else ""
                         gc_el   = db.select_one(".usage.dusage")
@@ -337,12 +347,15 @@ def scrape_cambridge(word: str, base_url: str = "") -> dict:
                             if ex_el.find_parent(class_="phrase-block"):
                                 continue
                             eg = ex_el.select_one(".eg.deg") or ex_el.select_one(".eg")
-                            en_text = _text(eg) if eg else ""
+                            en_text = _text(eg, sep="") if eg else ""
                             if not en_text:
                                 continue
                             ex_trans = ex_el.select_one(".trans.dtrans") or ex_el.select_one(".trans")
+                            ex_gram_el = ex_el.select_one(".gram.dgram")
+                            ex_gram = _text(ex_gram_el) if ex_gram_el else ""
                             examples.append({"en": en_text,
-                                             "zh": _text(ex_trans) if ex_trans else ""})
+                                             "zh": _text(ex_trans) if ex_trans else "",
+                                             "gram": ex_gram})
                         if en or zh:
                             xrefs = _parse_xrefs(db)
                             last_def = {
@@ -381,8 +394,7 @@ def scrape_cambridge(word: str, base_url: str = "") -> dict:
                 en = _text(def_el).rstrip(":")
                 trans_el = db.select_one(".trans.dtrans") or db.select_one(".trans")
                 zh = _text(trans_el)
-                gram_el = db.select_one(".gram.dgram")
-                gram    = _text(gram_el) if gram_el else ""
+                gram    = _def_gram(db)
                 lab_el  = db.select_one(".lab.dlab")
                 label   = _text(lab_el) if lab_el else ""
                 gc_el   = db.select_one(".usage.dusage")
@@ -392,11 +404,13 @@ def scrape_cambridge(word: str, base_url: str = "") -> dict:
                     if ex_el.find_parent(class_="phrase-block"):
                         continue
                     eg = ex_el.select_one(".eg.deg") or ex_el.select_one(".eg")
-                    en_text = _text(eg) if eg else ""
+                    en_text = _text(eg, sep="") if eg else ""
                     if not en_text:
                         continue
                     ex_trans = ex_el.select_one(".trans.dtrans") or ex_el.select_one(".trans")
-                    examples.append({"en": en_text, "zh": _text(ex_trans) if ex_trans else ""})
+                    ex_gram_el = ex_el.select_one(".gram.dgram")
+                    ex_gram = _text(ex_gram_el) if ex_gram_el else ""
+                    examples.append({"en": en_text, "zh": _text(ex_trans) if ex_trans else "", "gram": ex_gram})
                 if en or zh:
                     xrefs = _parse_xrefs(db)
                     definitions.append({
@@ -444,18 +458,21 @@ def scrape_cambridge(word: str, base_url: str = "") -> dict:
                 def_el = db.select_one(".def.ddef_d") or db.select_one(".def")
                 en     = _text(def_el).rstrip(":") if def_el else ""
                 zh     = _def_trans(db)
-                gram   = _text(db.select_one(".gram.dgram") or db.select_one(".gram"))
+                gram   = _def_gram(db)
                 label  = _text(db.select_one(".lab.dlab")   or db.select_one(".lab"))
                 usage  = _text(db.select_one(".usage.dusage"))
                 examples = []
                 for ex_el in db.select(".examp.dexamp")[:3]:
                     eg = ex_el.select_one(".eg.deg") or ex_el.select_one(".eg")
-                    en_text = _text(eg) if eg else ""
+                    en_text = _text(eg, sep="") if eg else ""
                     if not en_text:
                         continue
                     ex_trans = ex_el.select_one(".trans.dtrans") or ex_el.select_one(".trans")
+                    ex_gram_el = ex_el.select_one(".gram.dgram")
+                    ex_gram = _text(ex_gram_el) if ex_gram_el else ""
                     examples.append({"en": en_text,
-                                     "zh": _text(ex_trans) if ex_trans else ""})
+                                     "zh": _text(ex_trans) if ex_trans else "",
+                                     "gram": ex_gram})
                 if en or zh:
                     xrefs = _parse_xrefs(db)
                     definitions.append({
