@@ -84,6 +84,14 @@ def _def_gram(db) -> str:
     return ""
 
 
+def _def_label(db) -> str:
+    """Get definition-level label, ignoring those inside .var.dvar (variant notes)."""
+    for el in db.select(".lab.dlab"):
+        if not el.find_parent(class_=re.compile(r"\bdvar\b")):
+            return _text(el)
+    return ""
+
+
 def _def_usage(db) -> str:
     """Get definition-level usage note, ignoring those inside .var.dvar (variant notes)."""
     for el in db.select(".usage.dusage"):
@@ -273,7 +281,7 @@ def scrape_cambridge(word: str, base_url: str = "") -> dict:
                 en = _text(def_el).rstrip(":")
                 zh = _def_trans(db)
                 gram2   = _def_gram(db)
-                label2  = _text(db.select_one(".lab.dlab"))
+                label2  = _def_label(db)
                 usage2   = _def_usage(db)
                 variant2 = _def_variant(db)
                 examples = []
@@ -308,8 +316,7 @@ def scrape_cambridge(word: str, base_url: str = "") -> dict:
                 en = _text(def_el).rstrip(":")
                 zh = _def_trans(db)
                 gram    = _def_gram(db)
-                lab_el  = db.select_one(".lab.dlab")
-                label   = _text(lab_el) if lab_el else ""
+                label   = _def_label(db)
                 usage   = _def_usage(db)
                 variant = _def_variant(db)
                 examples = []
@@ -355,8 +362,7 @@ def scrape_cambridge(word: str, base_url: str = "") -> dict:
                         en = _text(def_el).rstrip(":")
                         zh = _def_trans(db)
                         gram    = _def_gram(db)
-                        lab_el  = db.select_one(".lab.dlab")
-                        label   = _text(lab_el) if lab_el else ""
+                        label   = _def_label(db)
                         usage   = _def_usage(db)
                         variant = _def_variant(db)
                         examples = []
@@ -412,8 +418,7 @@ def scrape_cambridge(word: str, base_url: str = "") -> dict:
                 trans_el = db.select_one(".trans.dtrans") or db.select_one(".trans")
                 zh = _text(trans_el)
                 gram    = _def_gram(db)
-                lab_el  = db.select_one(".lab.dlab")
-                label   = _text(lab_el) if lab_el else ""
+                label   = _def_label(db)
                 usage   = _def_usage(db)
                 variant = _def_variant(db)
                 examples = []
@@ -476,7 +481,7 @@ def scrape_cambridge(word: str, base_url: str = "") -> dict:
                 en     = _text(def_el).rstrip(":") if def_el else ""
                 zh     = _def_trans(db)
                 gram   = _def_gram(db)
-                label  = _text(db.select_one(".lab.dlab")   or db.select_one(".lab"))
+                label  = _def_label(db)
                 usage   = _def_usage(db)
                 variant = _def_variant(db)
                 examples = []
