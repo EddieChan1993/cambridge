@@ -312,6 +312,7 @@ Window size: `W=440, H=710`.
 - ♻️ 回退：强制撤销破坏 Python 语法的 commit（dbd4b52 将 `\n`/`\\`/`\r` 转义符转为字面字符，导致 5 个文件语法错误），通过 `git reset --hard + force push` 恢复干净状态
 - 🐛 修复：例句文本提取改用 `sep=""` 避免 `<b>` 包裹单词部分字符时（如 `mak<b>ing</b>`）插入空格导致 "mak ing" 断词显示
 - 🐛 修复：新增 `_def_gram()` 辅助函数，排除位于 `.examp` 内的语法标签作为 definition 级别 gram；将例句内的 `.gram.dgram`（如 `[ + -ing verb ]`）正确提取并显示在对应例句行前
+- 🐛 修复：新增 `_def_usage()` / `_def_variant()` — `.usage.dusage` 被误从 `.var.dvar` 内提取导致 "old use" 错误作为 usage note 显示；`_def_variant()` 提取 `.var.dvar` 完整文本（如 "( US also or old use die )"）新增 `variant` 字段并在 word_display 正确渲染
 
 ---
 

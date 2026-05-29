@@ -251,6 +251,7 @@ def build_attributed_string(data: dict, font_size: int = 14) -> NSMutableAttribu
         gram      = defn.get("gram", "")
         label     = defn.get("label", "")
         usage     = defn.get("usage", "")
+        variant   = defn.get("variant", "")
         guideword = defn.get("guideword", "")
         exs       = defn.get("examples", [])
         synonyms  = defn.get("synonyms", [])
@@ -272,6 +273,9 @@ def build_attributed_string(data: dict, font_size: int = 14) -> NSMutableAttribu
         _append(mas, "\n", _attrs(f_en, c_en, def_para))
 
         note_lower = {p.lower() for p in note_parts}
+        if variant:
+            var_para = _para(line=2, after=2, head=h_indent, first=h_indent)
+            _append(mas, variant + "\n", _attrs(f_note, c_note, var_para))
         if usage and usage.lower() not in note_lower:
             usage_para = _para(line=2, after=2, head=h_indent, first=h_indent)
             _append(mas, f"▸ {usage}\n", _attrs(f_note, c_note, usage_para))

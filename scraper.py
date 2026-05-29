@@ -84,6 +84,20 @@ def _def_gram(db) -> str:
     return ""
 
 
+def _def_usage(db) -> str:
+    """Get definition-level usage note, ignoring those inside .var.dvar (variant notes)."""
+    for el in db.select(".usage.dusage"):
+        if not el.find_parent(class_=re.compile(r"\bdvar\b")):
+            return _text(el)
+    return ""
+
+
+def _def_variant(db) -> str:
+    """Extract variant form text from .var.dvar (e.g. '( US also or old use die )')."""
+    var_el = db.select_one(".var.dvar")
+    return _text(var_el) if var_el else ""
+
+
 def _fetch(url: str) -> tuple:
     """Fetch URL, return (response, soup) or raise RequestException."""
     resp = requests.get(url, headers=HEADERS, timeout=15)
@@ -260,7 +274,8 @@ def scrape_cambridge(word: str, base_url: str = "") -> dict:
                 zh = _def_trans(db)
                 gram2   = _def_gram(db)
                 label2  = _text(db.select_one(".lab.dlab"))
-                usage2  = _text(db.select_one(".usage.dusage"))
+                usage2   = _def_usage(db)
+                variant2 = _def_variant(db)
                 examples = []
                 for ex_el in db.select(".examp.dexamp")[:3]:
                     eg = ex_el.select_one(".eg.deg") or ex_el.select_one(".eg")
@@ -274,7 +289,7 @@ def scrape_cambridge(word: str, base_url: str = "") -> dict:
                 if en or zh:
                     xrefs = _parse_xrefs(db)
                     ph_defs.append({"en": en, "zh": zh, "gram": gram2,
-                                    "label": label2, "usage": usage2,
+                                    "label": label2, "usage": usage2, "variant": variant2,
                                     "examples": examples,
                                     "synonyms": xrefs["synonyms"],
                                     "antonyms": xrefs["antonyms"]})
@@ -295,8 +310,8 @@ def scrape_cambridge(word: str, base_url: str = "") -> dict:
                 gram    = _def_gram(db)
                 lab_el  = db.select_one(".lab.dlab")
                 label   = _text(lab_el) if lab_el else ""
-                gc_el   = db.select_one(".usage.dusage")
-                usage   = _text(gc_el) if gc_el else ""
+                usage   = _def_usage(db)
+                variant = _def_variant(db)
                 examples = []
                 for ex_el in db.select(".examp.dexamp")[:3]:
                     eg = ex_el.select_one(".eg.deg") or ex_el.select_one(".eg")
@@ -311,7 +326,7 @@ def scrape_cambridge(word: str, base_url: str = "") -> dict:
                     xrefs = _parse_xrefs(db)
                     definitions.append({
                         "en": en, "zh": zh,
-                        "gram": gram, "label": label, "usage": usage,
+                        "gram": gram, "label": label, "usage": usage, "variant": variant,
                         "guideword": "", "examples": examples, "phrases": [],
                         "synonyms": xrefs["synonyms"], "antonyms": xrefs["antonyms"],
                     })
@@ -342,8 +357,8 @@ def scrape_cambridge(word: str, base_url: str = "") -> dict:
                         gram    = _def_gram(db)
                         lab_el  = db.select_one(".lab.dlab")
                         label   = _text(lab_el) if lab_el else ""
-                        gc_el   = db.select_one(".usage.dusage")
-                        usage   = _text(gc_el) if gc_el else ""
+                        usage   = _def_usage(db)
+                        variant = _def_variant(db)
                         examples = []
                         for ex_el in db.select(".examp.dexamp")[:3]:
                             if ex_el.find_parent(class_="phrase-block"):
@@ -362,7 +377,7 @@ def scrape_cambridge(word: str, base_url: str = "") -> dict:
                             xrefs = _parse_xrefs(db)
                             last_def = {
                                 "en": en, "zh": zh,
-                                "gram": gram, "label": label, "usage": usage,
+                                "gram": gram, "label": label, "usage": usage, "variant": variant,
                                 "guideword": guideword,
                                 "examples": examples,
                                 "phrases": [],
@@ -380,7 +395,7 @@ def scrape_cambridge(word: str, base_url: str = "") -> dict:
                                 # No preceding def — store as a standalone phrase def
                                 standalone = {
                                     "en": "", "zh": "",
-                                    "gram": "", "label": "", "usage": "",
+                                    "gram": "", "label": "", "usage": "", "variant": "",
                                     "guideword": guideword,
                                     "examples": [],
                                     "phrases": [p],
@@ -399,8 +414,8 @@ def scrape_cambridge(word: str, base_url: str = "") -> dict:
                 gram    = _def_gram(db)
                 lab_el  = db.select_one(".lab.dlab")
                 label   = _text(lab_el) if lab_el else ""
-                gc_el   = db.select_one(".usage.dusage")
-                usage   = _text(gc_el) if gc_el else ""
+                usage   = _def_usage(db)
+                variant = _def_variant(db)
                 examples = []
                 for ex_el in db.select(".examp.dexamp")[:3]:
                     if ex_el.find_parent(class_="phrase-block"):
@@ -417,7 +432,7 @@ def scrape_cambridge(word: str, base_url: str = "") -> dict:
                     xrefs = _parse_xrefs(db)
                     definitions.append({
                         "en": en, "zh": zh,
-                        "gram": gram, "label": label, "usage": usage,
+                        "gram": gram, "label": label, "usage": usage, "variant": variant,
                         "examples": examples, "phrases": [],
                         "synonyms": xrefs["synonyms"], "antonyms": xrefs["antonyms"],
                     })
@@ -462,7 +477,8 @@ def scrape_cambridge(word: str, base_url: str = "") -> dict:
                 zh     = _def_trans(db)
                 gram   = _def_gram(db)
                 label  = _text(db.select_one(".lab.dlab")   or db.select_one(".lab"))
-                usage  = _text(db.select_one(".usage.dusage"))
+                usage   = _def_usage(db)
+                variant = _def_variant(db)
                 examples = []
                 for ex_el in db.select(".examp.dexamp")[:3]:
                     eg = ex_el.select_one(".eg.deg") or ex_el.select_one(".eg")
@@ -479,7 +495,7 @@ def scrape_cambridge(word: str, base_url: str = "") -> dict:
                     xrefs = _parse_xrefs(db)
                     definitions.append({
                         "en": en, "zh": zh, "gram": gram, "label": label,
-                        "usage": usage, "guideword": "", "examples": examples,
+                        "usage": usage, "variant": variant, "guideword": "", "examples": examples,
                         "phrases": [],
                         "synonyms": xrefs["synonyms"], "antonyms": xrefs["antonyms"],
                     })
