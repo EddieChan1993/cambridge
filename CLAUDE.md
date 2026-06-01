@@ -307,6 +307,11 @@ Window size: `W=440, H=710`.
 
 ## 变更记录
 
+### 2026-06-01
+- 🆕 新增：主搜索框实时联想补全（`_SuggestOverlay`）——内嵌 NSView，调用 `NSSpellChecker` 系统英语词典，任意单词均可提示；历史/收藏匹配词优先置顶；↓↑/Enter/Esc 键盘导航；dev 和 full build 行为一致
+- 🆕 新增：所有 `.py` 源文件顶部加版权声明（© 2026 EddieChan1993）
+- 🐛 修复：音频缓存（`_playAudio_` + `_prefetchAudio` + `DataManager.audio_cache`）在 worktree 合并时被覆盖丢失，已恢复
+
 ### 2026-05-28
 - 🐛 修复：音标抓取 bug——将 `soup.select(".ipa")` 全页扫描改为直接迭代 `.dpron-i` 容器，彻底解决短语词条（如"take care of"）错误显示无关词（horse/hoarse）音标 `/hɔːs/` `/hɔːrs/` 的问题
 - ♻️ 回退：强制撤销破坏 Python 语法的 commit（dbd4b52 将 `\n`/`\\`/`\r` 转义符转为字面字符，导致 5 个文件语法错误），通过 `git reset --hard + force push` 恢复干净状态
@@ -332,6 +337,7 @@ Window size: `W=440, H=710`.
 - **URL field save only fires on blur (`controlTextDidEndEditing_`)**: if the user clicks 保存 without first clicking elsewhere, the text field never loses focus and the new URL is not saved. Fix: also flush the URL field value explicitly inside `saveSettings_` and `windowShouldClose_`.
 - **Cache survives URL changes**: switching between language variants (simplified ↔ traditional) returns stale translated content from the old URL. Always call `data_manager.clear_cache()` when `lookup_base_url` changes.
 - **NSPanel invisible in py2app full builds**: borderless non-activating `NSPanel` reports `isVisible() = True` but renders nothing after py2app packaging. Use an in-window `NSView` overlay instead (see `_SuggestOverlay` in `main_window.py`).
+- **Never `cp` a worktree file over the main repo**: worktree branches are created from a snapshot of `main`; if other commits landed on `main` in the meantime, a blind `cp` silently discards them. Always work directly in the main repo (`/Users/eddiechan/code/cambridge/`) or use `git merge`/`cherry-pick` to integrate worktree changes.
 
 ## Global Hotkey — Lessons Learned (hard-won)
 
