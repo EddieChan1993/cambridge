@@ -312,6 +312,9 @@ Window size: `W=440, H=710`.
 - 🆕 新增：所有 `.py` 源文件顶部加版权声明（© 2026 EddieChan1993）
 - 🐛 修复：音频缓存（`_playAudio_` + `_prefetchAudio` + `DataManager.audio_cache`）在 worktree 合并时被覆盖丢失，已恢复
 
+### 2026-06-04
+- 🆕 收藏列表改为按时间倒序排列（`get_favorites()` 按 `time` 字段降序排序，新收藏显示在最前）
+
 ### 2026-05-28
 - 🐛 修复：音标抓取 bug——将 `soup.select(".ipa")` 全页扫描改为直接迭代 `.dpron-i` 容器，彻底解决短语词条（如"take care of"）错误显示无关词（horse/hoarse）音标 `/hɔːs/` `/hɔːrs/` 的问题
 - ♻️ 回退：强制撤销破坏 Python 语法的 commit（dbd4b52 将 `\n`/`\\`/`\r` 转义符转为字面字符，导致 5 个文件语法错误），通过 `git reset --hard + force push` 恢复干净状态
