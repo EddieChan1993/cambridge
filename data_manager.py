@@ -278,7 +278,15 @@ class DataManager:
         return word.lower().strip() in self.favorites
 
     def get_favorites(self) -> list:
-        return [v["word"] for v in self.favorites.values()]
+        """Return favorites sorted by time descending (newest first)."""
+        return [
+            v["word"]
+            for v in sorted(
+                self.favorites.values(),
+                key=lambda x: x.get("time", ""),
+                reverse=True,
+            )
+        ]
 
     def remove_favorite(self, word: str):
         key = word.lower().strip()
