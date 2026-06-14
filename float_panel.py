@@ -261,8 +261,7 @@ class FloatPanel(NSObject):
                 with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as f:
                     f.write(data)
                     tmp = f.name
-                subprocess.run(["afplay", tmp], check=False)
-                os.unlink(tmp)
+                subprocess.Popen(["afplay", tmp])
             except Exception as e:
                 print(f"[Audio] play error: {e}")
 
@@ -271,11 +270,24 @@ class FloatPanel(NSObject):
                 if url in ac:
                     _play(ac[url])
                     return
-                r = _req.get(url, headers=MainWindowController._AUDIO_HEADERS, timeout=10)
-                r.raise_for_status()
-                if dm:
-                    dm.put_audio_cache(url, r.content)
-                _play(ac[url])
+                should_fetch, event = (dm.claim_audio_fetch(url) if dm
+                                       else (True, None))
+                if not should_fetch:
+                    if event is not None:
+                        event.wait(timeout=12)
+                    if url in ac:
+                        _play(ac[url])
+                    return
+                try:
+                    r = _req.get(url, headers=MainWindowController._AUDIO_HEADERS, timeout=10)
+                    r.raise_for_status()
+                    if dm:
+                        dm.put_audio_cache(url, r.content)
+                finally:
+                    if dm:
+                        dm.release_audio_fetch(url)
+                if url in ac:
+                    _play(ac[url])
             except Exception as e:
                 print(f"[Audio] {e}")
 

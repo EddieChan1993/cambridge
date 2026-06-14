@@ -3,6 +3,7 @@
 import json
 import os
 import shutil
+import threading
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
@@ -85,6 +86,9 @@ class DataManager:
     # In-memory audio cache: URL → MP3 bytes.
     # Bounded to cached_word_count × 2 (UK + US per word), cleared with word cache.
     audio_cache: dict = {}
+    # In-flight download deduplication: URL → threading.Event
+    _audio_inflight: dict = {}
+    _audio_inflight_lock: threading.Lock = threading.Lock()
 
     @staticmethod
     def _mtime(path: Path):
@@ -234,6 +238,8 @@ class DataManager:
         self.cache = {}
         self._audio_url_map.clear()
         DataManager.audio_cache.clear()
+        with DataManager._audio_inflight_lock:
+            DataManager._audio_inflight.clear()
         self._save(CACHE_FILE, self.cache)
 
     def put_audio_cache(self, url: str, data: bytes):
@@ -247,6 +253,28 @@ class DataManager:
         if len(ac) >= limit:
             ac.pop(next(iter(ac)))   # evict oldest (FIFO)
         ac[url] = data
+
+    def claim_audio_fetch(self, url: str):
+        """Claim exclusive right to download url. Returns (should_fetch, event).
+        If should_fetch=True: caller must download then call release_audio_fetch(url).
+        If should_fetch=False: an in-flight download exists; caller should wait on event.
+        If should_fetch=False and event is None: url is already in cache.
+        """
+        with DataManager._audio_inflight_lock:
+            if url in DataManager.audio_cache:
+                return False, None
+            if url in DataManager._audio_inflight:
+                return False, DataManager._audio_inflight[url]
+            ev = threading.Event()
+            DataManager._audio_inflight[url] = ev
+            return True, ev
+
+    def release_audio_fetch(self, url: str):
+        """Signal that a claimed download has completed (success or failure)."""
+        with DataManager._audio_inflight_lock:
+            ev = DataManager._audio_inflight.pop(url, None)
+        if ev:
+            ev.set()
 
     def remove_history(self, word: str):
         self.history = [h for h in self.history if h["word"].lower() != word.lower()]

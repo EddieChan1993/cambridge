@@ -312,6 +312,11 @@ Window size: `W=440, H=710`.
 - 🆕 新增：所有 `.py` 源文件顶部加版权声明（© 2026 EddieChan1993）
 - 🐛 修复：音频缓存（`_playAudio_` + `_prefetchAudio` + `DataManager.audio_cache`）在 worktree 合并时被覆盖丢失，已恢复
 
+### 2026-06-14
+- 🐛 修复：音频下载竞态——`DataManager.claim_audio_fetch` / `release_audio_fetch` 以 `threading.Event` 去重；用户点击时若 prefetch 正在下载同一 URL，则等待完成而非重复发起请求
+- 🐛 修复：音频播放改回 afplay + `Popen`（非阻塞），撤销引起无声的 NSSound 方案（`NSSound.initWithData_` 在 py2app 打包环境下行为不可靠）
+- 🐛 修复：`word_display.py` 发音行 IPA 末尾两个空格带 `NSLinkAttributeName`，导致两组发音之间空白区域误触发点击；改为单独 append 无链接属性的空格
+
 ### 2026-06-04
 - 🆕 收藏列表改为按时间倒序排列（`get_favorites()` 按 `time` 字段降序排序，新收藏显示在最前）
 

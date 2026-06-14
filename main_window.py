@@ -1145,8 +1145,7 @@ class MainWindowController(NSObject):
                 with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as f:
                     f.write(data)
                     tmp = f.name
-                subprocess.run(["afplay", tmp], check=False)
-                os.unlink(tmp)
+                subprocess.Popen(["afplay", tmp])
             except Exception as e:
                 print(f"[Audio] play error: {e}")
 
@@ -1155,11 +1154,26 @@ class MainWindowController(NSObject):
                 if url in ac:
                     _play(ac[url])
                     return
-                r = _req.get(url, headers=self._AUDIO_HEADERS, timeout=10)
-                r.raise_for_status()
-                if dm:
-                    dm.put_audio_cache(url, r.content)
-                _play(ac[url])
+                # Check if prefetch is already downloading this URL
+                should_fetch, event = (dm.claim_audio_fetch(url) if dm
+                                       else (True, None))
+                if not should_fetch:
+                    if event is not None:
+                        event.wait(timeout=12)   # join the in-flight prefetch
+                    if url in ac:
+                        _play(ac[url])
+                    return
+                # We claimed the slot — do the download
+                try:
+                    r = _req.get(url, headers=self._AUDIO_HEADERS, timeout=10)
+                    r.raise_for_status()
+                    if dm:
+                        dm.put_audio_cache(url, r.content)
+                finally:
+                    if dm:
+                        dm.release_audio_fetch(url)
+                if url in ac:
+                    _play(ac[url])
             except Exception as e:
                 print(f"[Audio] {e}")
 
@@ -1176,18 +1190,23 @@ class MainWindowController(NSObject):
         urls = [
             p.get("audio", "")
             for p in (data or {}).get("pronunciations", [])
-            if p.get("audio") and p["audio"] not in ac
+            if p.get("audio")
         ]
         if not urls:
             return
 
         def _fetch(url):
+            should_fetch, _ = dm.claim_audio_fetch(url)
+            if not should_fetch:
+                return   # already cached or another thread is downloading
             try:
                 r = _req.get(url, headers=self._AUDIO_HEADERS, timeout=10)
                 if r.ok:
                     dm.put_audio_cache(url, r.content)
             except Exception:
                 pass
+            finally:
+                dm.release_audio_fetch(url)
 
         for url in urls:
             threading.Thread(target=_fetch, args=(url,), daemon=True).start()

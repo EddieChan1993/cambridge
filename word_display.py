@@ -169,7 +169,8 @@ def build_attributed_string(data: dict, font_size: int = 14) -> NSMutableAttribu
             if audio_url:
                 ipa_a = dict(ipa_a)
                 ipa_a[NSLinkAttributeName] = audio_url
-            _append(mas, f"/{ipa}/  ", ipa_a)
+            _append(mas, f"/{ipa}/", ipa_a)
+            _append(mas, "  ", _attrs(f_pron, c_pron, para))   # gap not clickable
         _append(mas, "\n", _attrs(f_pron, c_pron, _para(after=14)))
 
     f_phrase   = NSFont.boldSystemFontOfSize_(_sz(13))
