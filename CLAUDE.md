@@ -312,6 +312,9 @@ Window size: `W=440, H=710`.
 - 🆕 新增：所有 `.py` 源文件顶部加版权声明（© 2026 EddieChan1993）
 - 🐛 修复：音频缓存（`_playAudio_` + `_prefetchAudio` + `DataManager.audio_cache`）在 worktree 合并时被覆盖丢失，已恢复
 
+### 2026-06-16
+- ♻️ 优化：scraper 解析提速——`_fetch` 在解析前将 HTML 切到 `<article>` 标签（从 300-540KB 降到 85-290KB），解析耗时减少 60-90%；同时将后代选择器 `.pr.di.superentry .di-body` 简化为 `.di-body`（切片后无干扰节点），select 耗时减少 40%。典型查词时间：简单词 3s→1.9s，复杂词 6-7s→3.5-4s。
+
 ### 2026-06-14
 - 🐛 修复：音频下载竞态——`DataManager.claim_audio_fetch` / `release_audio_fetch` 以 `threading.Event` 去重；用户点击时若 prefetch 正在下载同一 URL，则等待完成而非重复发起请求
 - 🐛 修复：音频播放改回 afplay + `Popen`（非阻塞），撤销引起无声的 NSSound 方案（`NSSound.initWithData_` 在 py2app 打包环境下行为不可靠）

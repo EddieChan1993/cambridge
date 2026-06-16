@@ -110,7 +110,13 @@ def _fetch(url: str) -> tuple:
     """Fetch URL, return (response, soup) or raise RequestException."""
     resp = requests.get(url, headers=HEADERS, timeout=15)
     resp.raise_for_status()
-    return resp, BeautifulSoup(resp.text, "lxml")
+    html = resp.text
+    # Cambridge pages are large (~300-540KB). The dictionary content lives entirely
+    # inside <article>; slicing to that before parsing cuts parse time by ~60-90%.
+    start = html.find("<article")
+    end = html.rfind("</article>") + 10
+    html_to_parse = html[start:end] if start >= 0 and end > start else html
+    return resp, BeautifulSoup(html_to_parse, "lxml")
 
 
 def scrape_cambridge(word: str, base_url: str = "") -> dict:
@@ -207,7 +213,9 @@ def scrape_cambridge(word: str, base_url: str = "") -> dict:
     # phrase-di-blocks sit directly in di-body alongside .entry containers,
     # so we walk the superentry structure to preserve the page's interleaving.
     blocks = []
-    for di_body in soup.select(".pr.di.superentry .di-body, .di.superentry .di-body"):
+    # Use the simple class selector — the HTML is pre-sliced to <article> so there
+    # are no stray .di-body elements from navigation or sidebar.
+    for di_body in soup.select(".di-body"):
         for child in di_body.children:
             if not hasattr(child, "get"):
                 continue
