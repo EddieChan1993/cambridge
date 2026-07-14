@@ -307,6 +307,15 @@ Window size: `W=440, H=710`.
 
 ## 变更记录
 
+### 2026-07-14（第二次）
+- 🆕 新增：Pill tab bar（历史/收藏）——替换 NSSegmentedControl，仿 Claude 风格胶囊切换，`tabHistClick_` / `tabFavClick_` IBAction + `_switchTab` 逻辑
+- 🆕 新增：查询 loading 动画——overlay 显示系统 NSProgressIndicator spinner + "正在查询" + 单词名，结果返回后自动停止
+- 🆕 新增：`_EmojiView` 自定义 NSView——用 `NSString.drawAtPoint_withAttributes_` 精确居中绘制 emoji，彻底解决 NSTextField baseline 偏移问题
+- 🆕 新增：欢迎界面 emoji 改为 🧀（"知识"谐音梗）
+- 🐛 修复：`@objc.IBAction` 重复装饰 `tabHistClick_` 导致 SIGILL 崩溃
+- 🐛 修复：loading overlay 一直显示（spinner/emoji 状态切换逻辑混乱，`_showLoadingOverlay` 残留旧 startPulse 调用）
+- ♻️ 优化：overlay 布局提取为 `_layoutOverlay` 公共方法，`_showOverlay` / `_showLoadingOverlay` / `_hideOverlay` 三态切换干净
+
 ### 2026-07-14
 - 🆕 新增：header 区复制按钮（⎘），点击复制当前词条内容到剪贴板，1.5s 后图标自动恢复
 - ♻️ 优化：⎘/★/☰ 三个 icon 按钮改为手动绘制（drawRect_），精确水平+垂直居中，绕过 NSButton cell 内部 padding 偏移

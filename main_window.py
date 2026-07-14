@@ -45,6 +45,10 @@ from AppKit import (
     NSStringPboardType,
     NSFontAttributeName,
     NSForegroundColorAttributeName,
+    NSVisualEffectView,
+    NSImageView,
+    NSImage,
+    NSProgressIndicator,
 )
 
 from word_display import make_word_scroll_view, update_word_view
@@ -140,21 +144,54 @@ class _HoverFavButton(NSButton):
 
     def drawRect_(self, rect):
         if self._hovered:
-            NSColor.colorWithWhite_alpha_(0.5, 0.12).setFill()
+            NSColor.colorWithWhite_alpha_(0.5, 0.08).setFill()
             path = NSBezierPath.bezierPathWithRoundedRect_xRadius_yRadius_(
                 self.bounds(), 6, 6)
             path.fill()
+        from Foundation import NSString
         b = self.bounds()
-        title = self.title()
+        ns = NSString.stringWithString_(self.title())
         attrs = {
             NSFontAttributeName: self.font(),
             NSForegroundColorAttributeName: self.contentTintColor() or NSColor.labelColor(),
         }
-        sz = title.sizeWithAttributes_(attrs)
-        title.drawAtPoint_withAttributes_(
+        sz = ns.sizeWithAttributes_(attrs)
+        ns.drawAtPoint_withAttributes_(
             (b.origin.x + (b.size.width  - sz.width)  / 2,
              b.origin.y + (b.size.height - sz.height) / 2),
             attrs
+        )
+
+
+class _EmojiView(NSView):
+    """NSView that draws a single emoji/text perfectly centered (H+V)."""
+
+    def initWithFrame_(self, frame):
+        self = objc.super(_EmojiView, self).initWithFrame_(frame)
+        if self is None:
+            return None
+        self._text = ""
+        self._font_size = 46
+        return self
+
+    @objc.python_method
+    def set_text(self, text):
+        self._text = text
+        self.setNeedsDisplay_(True)
+
+
+    def drawRect_(self, rect):
+        if not self._text:
+            return
+        from Foundation import NSString
+        b = self.bounds()
+        attrs = {NSFontAttributeName: NSFont.systemFontOfSize_(self._font_size)}
+        ns = NSString.stringWithString_(self._text)
+        sz = ns.sizeWithAttributes_(attrs)
+        ns.drawAtPoint_withAttributes_(
+            (b.origin.x + (b.size.width  - sz.width)  / 2,
+             b.origin.y + (b.size.height - sz.height) / 2),
+            attrs,
         )
 
 
@@ -189,7 +226,7 @@ class _WordRowView(NSView):
             return None
         w = frame.size.width
 
-        lbl = NSTextField.alloc().initWithFrame_(NSMakeRect(8, 3, w - 34, 18))
+        lbl = NSTextField.alloc().initWithFrame_(NSMakeRect(10, 5, w - 36, 18))
         lbl.setBezeled_(False); lbl.setDrawsBackground_(False)
         lbl.setEditable_(False); lbl.setSelectable_(False)
         lbl.setFont_(NSFont.systemFontOfSize_(13))
@@ -197,7 +234,7 @@ class _WordRowView(NSView):
         self.addSubview_(lbl)
         self._lbl = lbl
 
-        del_btn = NSButton.alloc().initWithFrame_(NSMakeRect(w - 26, 2, 20, 20))
+        del_btn = NSButton.alloc().initWithFrame_(NSMakeRect(w - 26, 4, 20, 20))
         del_btn.setTitle_("×")
         del_btn.setBordered_(False)
         del_btn.setFont_(NSFont.systemFontOfSize_(15))
@@ -416,11 +453,16 @@ class MainWindowController(NSObject):
         self._sep_main       = None
         self._scroll_content = None
         self._overlay        = None
+        self._ov_icon_bg     = None
         self._ov_icon        = None
         self._ov_title       = None
         self._ov_hint        = None
+        self._ov_spinner     = None
         self._table          = None
-        self._seg            = None
+        self._tab_pill       = None
+        self._tab_hist       = None
+        self._tab_fav        = None
+        self._tab_seg_w      = 0
         self._stat_label     = None
         self._clear_btn      = None
         self._export_btn     = None
@@ -457,23 +499,58 @@ class MainWindowController(NSObject):
         content = win.contentView()
 
         # ── 侧边栏（右侧固定宽度）─────────────────────────────────────────
-        left = NSView.alloc().initWithFrame_(NSMakeRect(cw - LEFT_W, 0, LEFT_W, ch))
-        left.setAutoresizingMask_(1 | 16)   # 左边距弹性 + 高度弹性 → 钉在右边
+        left = NSVisualEffectView.alloc().initWithFrame_(NSMakeRect(cw - LEFT_W, 0, LEFT_W, ch))
+        left.setMaterial_(7)        # NSVisualEffectMaterialSidebar
+        left.setBlendingMode_(1)    # NSVisualEffectBlendingModeWithinWindow
+        left.setState_(0)           # NSVisualEffectStateFollowsWindowActiveState
+        left.setAutoresizingMask_(1 | 16)
 
-        # [历史][收藏] segment — 垂直居中在 RIGHT_HDR 头部区域
-        _seg_h = 32
-        _seg_y = ch - RIGHT_HDR + (RIGHT_HDR - _seg_h) // 2
-        seg = NSSegmentedControl.alloc().initWithFrame_(
-            NSMakeRect(8, _seg_y, LEFT_W - 16, _seg_h))
-        seg.setSegmentCount_(2)
-        seg.setLabel_forSegment_("历史", 0)
-        seg.setLabel_forSegment_("收藏", 1)
-        seg.setSelectedSegment_(0)
-        seg.setFont_(NSFont.systemFontOfSize_(14))
-        seg.setTarget_(self)
-        seg.setAction_("segmentChanged:")
-        seg.setAutoresizingMask_(2 | 8)
-        left.addSubview_(seg)
+        # ── Pill tab bar（历史 / 收藏）──────────────────────────────────────
+        _tab_h   = 32
+        _tab_w   = LEFT_W - 16
+        _tab_y   = ch - RIGHT_HDR + (RIGHT_HDR - _tab_h) // 2
+        _seg_w   = (_tab_w - 4) / 2
+        _seg_h   = _tab_h - 4
+
+        tab_container = NSView.alloc().initWithFrame_(
+            NSMakeRect(8, _tab_y, _tab_w, _tab_h))
+        tab_container.setWantsLayer_(True)
+        tab_container.layer().setBackgroundColor_(
+            NSColor.colorWithWhite_alpha_(0.5, 0.09).CGColor())
+        tab_container.layer().setCornerRadius_(9)
+        tab_container.setAutoresizingMask_(2 | 8)
+        left.addSubview_(tab_container)
+
+        # 白色胶囊（活跃指示器）
+        tab_pill = NSView.alloc().initWithFrame_(NSMakeRect(2, 2, _seg_w, _seg_h))
+        tab_pill.setWantsLayer_(True)
+        tab_pill.layer().setBackgroundColor_(NSColor.controlBackgroundColor().CGColor())
+        tab_pill.layer().setCornerRadius_(7)
+        tab_pill.layer().setShadowColor_(NSColor.blackColor().CGColor())
+        tab_pill.layer().setShadowOpacity_(0.12)
+        tab_pill.layer().setShadowOffset_((0, -1))
+        tab_pill.layer().setShadowRadius_(2)
+        tab_container.addSubview_(tab_pill)
+
+        def _tab_btn(title, x, action):
+            btn = NSButton.alloc().initWithFrame_(NSMakeRect(x, 2, _seg_w, _seg_h))
+            btn.setTitle_(title)
+            btn.setBordered_(False)
+            btn.setButtonType_(NSButtonTypeMomentaryLight)
+            btn.setFocusRingType_(1)   # NSFocusRingTypeNone
+            btn.setTarget_(self)
+            btn.setAction_(action)
+            return btn
+
+        tab_hist = _tab_btn("历史", 2, "tabHistClick:")
+        tab_hist.setFont_(NSFont.boldSystemFontOfSize_(13))
+        tab_hist.setContentTintColor_(NSColor.labelColor())
+        tab_container.addSubview_(tab_hist)
+
+        tab_fav = _tab_btn("收藏", 2 + _seg_w, "tabFavClick:")
+        tab_fav.setFont_(NSFont.systemFontOfSize_(13))
+        tab_fav.setContentTintColor_(NSColor.secondaryLabelColor())
+        tab_container.addSubview_(tab_fav)
 
         # Thin separator — aligned with right panel divider at ch-RIGHT_HDR-1
         sep_top = NSView.alloc().initWithFrame_(
@@ -536,8 +613,8 @@ class MainWindowController(NSObject):
         table.setDelegate_(self)
         table.setTarget_(self)
         table.setDoubleAction_("rowDoubleClicked:")
-        table.setUsesAlternatingRowBackgroundColors_(True)
-        table.setRowHeight_(24)
+        table.setUsesAlternatingRowBackgroundColors_(False)
+        table.setRowHeight_(28)
         table.setAutoresizingMask_(2 | 16)
         list_scroll.setDocumentView_(table)
         left.addSubview_(list_scroll)
@@ -576,29 +653,51 @@ class MainWindowController(NSObject):
         hdr.setAutoresizingMask_(2 | 8)
 
         # 布局（从右到左，间距4px，右边距4px）：
-        # [☰ 34px] 4 [★ 34px] 4 [⎘ 34px] 6 [查询 60px] 8 [搜索框]
-        # 总右侧占用：4+34+4+34+4+34+6+60+8 = 188
+        # [☰ 34px] 4 [★ 34px] 4 [⎘ 34px] 6 [查询 60px] 8 [搜索框] 8 [logo 42px] 10
+        _LOGO_SZ   = 36
+        _LOGO_X    = 10
+        _FLD_LEFT  = _LOGO_X + _LOGO_SZ + 8   # 搜索框左起点 = 54
+
         _ICON_SZ = 34
         _ICON_F  = NSFont.systemFontOfSize_(22)
         _ICON_Y  = (RIGHT_HDR - _ICON_SZ) // 2
-        # x 坐标（从右向左）
-        _x_sidebar = right_w - 4 - _ICON_SZ          # right_w - 38
-        _x_fav     = _x_sidebar - 4 - _ICON_SZ       # right_w - 76
-        _x_copy    = _x_fav - 4 - _ICON_SZ           # right_w - 114
-        _x_query   = _x_copy - 6 - 60                # right_w - 180
-        fld_w      = _x_query - 8 - 8                # 左边距8 + 搜索框左padding8
+        _x_sidebar = right_w - 4 - _ICON_SZ
+        _x_fav     = _x_sidebar - 4 - _ICON_SZ
+        _x_copy    = _x_fav - 4 - _ICON_SZ
+        _x_query   = _x_copy - 6 - 60
+        fld_w      = _x_query - _FLD_LEFT - 8
 
-        search_field = NSTextField.alloc().initWithFrame_(
-            NSMakeRect(8, 15, fld_w, 36))
-        search_field.setPlaceholderString_("输入单词… 回车或点击查询")
-        search_field.setBezeled_(True)
-        search_field.setBezelStyle_(1)
-        search_field.setEditable_(True)
-        search_field.setContinuous_(False)
+        # Logo 图片
+        from Foundation import NSBundle
+        import os as _os
+        _icon_path = NSBundle.mainBundle().pathForResource_ofType_("icon", "png")
+        if not _icon_path:
+            _icon_path = _os.path.join(
+                _os.path.dirname(_os.path.abspath(__file__)), "icon.png")
+        _logo_img = NSImage.alloc().initWithContentsOfFile_(_icon_path) if _icon_path else None
+
+        logo_iv = NSImageView.alloc().initWithFrame_(
+            NSMakeRect(_LOGO_X, 15, _LOGO_SZ, _LOGO_SZ))
+        if _logo_img:
+            logo_iv.setImage_(_logo_img)
+        logo_iv.setImageScaling_(3)   # NSImageScaleProportionallyUpOrDown
+        logo_iv.setImageAlignment_(0) # NSImageAlignCenter
+        logo_iv.setWantsLayer_(True)
+        logo_iv.layer().setCornerRadius_(10)
+        logo_iv.layer().setMasksToBounds_(True)
+        logo_iv.setAutoresizingMask_(8)   # pin to top
+        hdr.addSubview_(logo_iv)
+
+        search_field = NSSearchField.alloc().initWithFrame_(
+            NSMakeRect(_FLD_LEFT, 15, fld_w, 36))
+        search_field.setPlaceholderString_("输入单词…")
         search_field.setTarget_(self)
         search_field.setAction_("searchEnter:")
         search_field.setFont_(NSFont.systemFontOfSize_(15))
-        search_field.cell().setControlSize_(3)   # NSControlSizeLarge — 光标/渲染跟着变大
+        search_field.cell().setControlSize_(3)
+        search_field.setSendsWholeSearchString_(True)
+        search_field.setSendsSearchStringImmediately_(False)
+        search_field.setDelegate_(self)
         search_field.setAutoresizingMask_(2)
         hdr.addSubview_(search_field)
 
@@ -665,10 +764,18 @@ class MainWindowController(NSObject):
         overlay.setAutoresizingMask_(2 | 16)
         overlay.setHidden_(True)
 
-        inner_h = 130
+        # 布局常量（从上到下）
+        _BG   = 90    # 圆形背景直径
+        _GAP1 = 16    # 圆圈 → 标题
+        _TH   = 26    # 标题高度
+        _GAP2 = 8     # 标题 → 副标题
+        _HH   = 20    # 副标题高度
+        _PAD  = 24    # 上下留白
+        inner_h = _PAD + _BG + _GAP1 + _TH + _GAP2 + _HH + _PAD   # = 208
+
         inner = NSView.alloc().initWithFrame_(
             NSMakeRect(0, (content_h - inner_h) / 2, right_w, inner_h))
-        inner.setAutoresizingMask_(2 | 8 | 32)   # 宽度弹性 + 上下边距均弹性 → 垂直居中
+        inner.setAutoresizingMask_(2 | 8 | 32)
 
         def _clbl(text, y, h, size=13, bold=False):
             f = NSTextField.alloc().initWithFrame_(NSMakeRect(0, y, right_w, h))
@@ -682,10 +789,38 @@ class MainWindowController(NSObject):
             f.setTextColor_(NSColor.secondaryLabelColor())
             return f
 
-        ov_icon  = _clbl("", inner_h - 50, 44, size=36)
-        ov_title = _clbl("", inner_h - 86, 24, size=16, bold=True)
-        ov_hint  = _clbl("", inner_h - 116, 20, size=13)
+        # 各元素 y（从 inner 底部算起）
+        _y_hint  = _PAD
+        _y_title = _y_hint  + _HH  + _GAP2
+        _y_icon  = _y_title + _TH  + _GAP1
+        _y_bg    = _y_icon                    # 圆圈与 icon 对齐
+
+        # 圆形背景（x 在 _showOverlay 里动态居中）
+        icon_bg = NSView.alloc().initWithFrame_(
+            NSMakeRect((right_w - _BG) / 2, _y_bg, _BG, _BG))
+        icon_bg.setWantsLayer_(True)
+        icon_bg.layer().setCornerRadius_(_BG / 2)
+        icon_bg.layer().setBackgroundColor_(
+            NSColor.colorWithWhite_alpha_(0.5, 0.07).CGColor())
+        icon_bg.setAutoresizingMask_(1 | 4)
+        inner.addSubview_(icon_bg)
+
+        ov_icon = _EmojiView.alloc().initWithFrame_(NSMakeRect(0, _y_icon, right_w, _BG))
+        ov_icon.setAutoresizingMask_(2)
+        ov_title = _clbl("", _y_title, _TH,  size=17, bold=True)
+        ov_hint  = _clbl("", _y_hint,  _HH,  size=12)
         ov_hint.setTextColor_(NSColor.tertiaryLabelColor())
+
+        # Spinner（loading 状态用，默认隐藏）
+        _SP = 36
+        ov_spinner = NSProgressIndicator.alloc().initWithFrame_(
+            NSMakeRect(0, _y_icon + (_BG - _SP) / 2, right_w, _SP))
+        ov_spinner.setStyle_(1)          # NSProgressIndicatorStyleSpinning
+        ov_spinner.setControlSize_(1)    # NSControlSizeRegular
+        ov_spinner.setIndeterminate_(True)
+        ov_spinner.setDisplayedWhenStopped_(False)
+        ov_spinner.setAutoresizingMask_(2)
+        inner.addSubview_(ov_spinner)
 
         inner.addSubview_(ov_icon)
         inner.addSubview_(ov_title)
@@ -697,9 +832,11 @@ class MainWindowController(NSObject):
         self._overlay         = overlay
         self._overlay_inner   = inner
         self._overlay_inner_h = inner_h
+        self._ov_icon_bg      = icon_bg
         self._ov_icon         = ov_icon
         self._ov_title        = ov_title
         self._ov_hint         = ov_hint
+        self._ov_spinner      = ov_spinner
 
         # ── 竖向分隔线（内容区右边缘，钉在右侧）──────────────────────────
         sep_main = NSView.alloc().initWithFrame_(
@@ -723,7 +860,10 @@ class MainWindowController(NSObject):
         self._sep_main       = sep_main
         self._sidebar_view   = left
         self._table          = table
-        self._seg            = seg
+        self._tab_pill       = tab_pill
+        self._tab_hist       = tab_hist
+        self._tab_fav        = tab_fav
+        self._tab_seg_w      = _seg_w
         self._stat_label     = stat_label
         self._clear_btn      = clear_btn
         self._export_btn     = export_btn
@@ -772,14 +912,14 @@ class MainWindowController(NSObject):
     def tableView_rowViewForRow_(self, tv, row):
         rv = tv.makeViewWithIdentifier_owner_("HR", self)
         if rv is None:
-            rv = _HoverRowView.alloc().initWithFrame_(NSMakeRect(0, 0, LEFT_W, 24))
+            rv = _HoverRowView.alloc().initWithFrame_(NSMakeRect(0, 0, LEFT_W, 28))
             rv.setIdentifier_("HR")
         return rv
 
     def tableView_viewForTableColumn_row_(self, tv, col, row):
         cell = tv.makeViewWithIdentifier_owner_("WR", self)
         if cell is None:
-            cell = _WordRowView.alloc().initWithFrame_(NSMakeRect(0, 0, LEFT_W, 24))
+            cell = _WordRowView.alloc().initWithFrame_(NSMakeRect(0, 0, LEFT_W, 28))
             cell.setIdentifier_("WR")
         if 0 <= row < len(self._list_data):
             cell.configure(self._list_data[row], row, self)
@@ -812,10 +952,32 @@ class MainWindowController(NSObject):
             self._sidebar_view.setHidden_(True)
 
     @objc.IBAction
-    def segmentChanged_(self, sender):
-        self._mode = "history" if sender.selectedSegment() == 0 else "favorites"
+    def tabHistClick_(self, sender):
+        self._switchTab("history")
+
+    @objc.IBAction
+    def tabFavClick_(self, sender):
+        self._switchTab("favorites")
+
+    @objc.python_method
+    def _switchTab(self, mode):
+        self._mode = mode
+        # 移动白色胶囊
+        f = self._tab_pill.frame()
+        pill_x = 2 if mode == "history" else 2 + self._tab_seg_w
+        self._tab_pill.setFrame_(NSMakeRect(pill_x, f.origin.y, f.size.width, f.size.height))
+        # 更新按钮字重和颜色
+        if mode == "history":
+            self._tab_hist.setFont_(NSFont.boldSystemFontOfSize_(13))
+            self._tab_hist.setContentTintColor_(NSColor.labelColor())
+            self._tab_fav.setFont_(NSFont.systemFontOfSize_(13))
+            self._tab_fav.setContentTintColor_(NSColor.secondaryLabelColor())
+        else:
+            self._tab_fav.setFont_(NSFont.boldSystemFontOfSize_(13))
+            self._tab_fav.setContentTintColor_(NSColor.labelColor())
+            self._tab_hist.setFont_(NSFont.systemFontOfSize_(13))
+            self._tab_hist.setContentTintColor_(NSColor.secondaryLabelColor())
         self._repositionBottomButtons()
-        # Clear search filter when switching tabs
         self._sidebar_filter = ""
         if self._sidebar_search is not None:
             self._sidebar_search.setStringValue_("")
@@ -928,7 +1090,7 @@ class MainWindowController(NSObject):
         self._current_word = None
         self._current_data = None
         self._updateFavBtn_(False)
-        self._showOverlay("📖", "输入单词开始查询", "支持英文单词 · 划词快捷键 · 历史收藏")
+        self._showOverlay("🧀", "输入单词开始查询", "支持英文单词 · 划词快捷键 · 历史收藏")
 
     # ── Autocomplete ──────────────────────────────────────────────────────────
 
@@ -1092,26 +1254,53 @@ class MainWindowController(NSObject):
             self.refreshList()
 
     @objc.python_method
-    def _showOverlay(self, icon: str, title: str, hint: str):
-        self._ov_icon.setStringValue_(icon)
-        self._ov_title.setStringValue_(title)
-        self._ov_hint.setStringValue_(hint)
-        # 从父视图（right panel）实时读取尺寸，autoresizing 未必及时更新
-        right_b = self._overlay.superview().bounds()
-        ov_w = right_b.size.width
-        ov_h = right_b.size.height - RIGHT_HDR - 1
+    def _layoutOverlay(self, ov_w, ov_h):
+        """共用：调整 overlay inner + 各子视图宽度居中。"""
         self._overlay.setFrame_(NSMakeRect(0, 0, ov_w, ov_h))
         ih = self._overlay_inner_h
         self._overlay_inner.setFrame_(
             NSMakeRect(0, (ov_h - ih) / 2, ov_w, ih))
-        for lbl in (self._ov_icon, self._ov_title, self._ov_hint):
-            f = lbl.frame()
-            lbl.setFrame_(NSMakeRect(0, f.origin.y, ov_w, f.size.height))
+        for v in (self._ov_icon, self._ov_title, self._ov_hint, self._ov_spinner):
+            f = v.frame()
+            v.setFrame_(NSMakeRect(0, f.origin.y, ov_w, f.size.height))
+        bg_f = self._ov_icon_bg.frame()
+        self._ov_icon_bg.setFrame_(
+            NSMakeRect((ov_w - bg_f.size.width) / 2,
+                       bg_f.origin.y,
+                       bg_f.size.width, bg_f.size.height))
+
+    @objc.python_method
+    def _showOverlay(self, icon: str, title: str, hint: str):
+        self._ov_spinner.stopAnimation_(None)
+        self._ov_icon_bg.setHidden_(False)
+        self._ov_icon.set_text(icon)
+        self._ov_title.setStringValue_(title)
+        self._ov_hint.setStringValue_(hint)
+        right_b = self._overlay.superview().bounds()
+        ov_w = right_b.size.width
+        ov_h = right_b.size.height - RIGHT_HDR - 1
+        self._layoutOverlay(ov_w, ov_h)
         self._scroll_content.setHidden_(True)
         self._overlay.setHidden_(False)
 
     @objc.python_method
+    def _showLoadingOverlay(self, word: str):
+        # 隐藏 emoji，只显示 spinner + 文字
+        self._ov_icon.set_text("")
+        self._ov_icon_bg.setHidden_(True)
+        self._ov_title.setStringValue_("正在查询")
+        self._ov_hint.setStringValue_(word)
+        right_b = self._overlay.superview().bounds()
+        ov_w = right_b.size.width
+        ov_h = right_b.size.height - RIGHT_HDR - 1
+        self._layoutOverlay(ov_w, ov_h)
+        self._scroll_content.setHidden_(True)
+        self._overlay.setHidden_(False)
+        self._ov_spinner.startAnimation_(None)
+
+    @objc.python_method
     def _hideOverlay(self):
+        self._ov_spinner.stopAnimation_(None)
         self._overlay.setHidden_(True)
         self._scroll_content.setHidden_(False)
 
@@ -1143,21 +1332,11 @@ class MainWindowController(NSObject):
 
     @objc.python_method
     def showLoadingForWord_(self, word: str):
-        self._hideOverlay()
         self._search_field.setStringValue_(word)
         self._current_word = word
         self._current_data = None
         self._updateFavBtn_(False)
-        from Foundation import NSAttributedString
-        from AppKit import NSFontAttributeName, NSForegroundColorAttributeName
-        ph = NSAttributedString.alloc().initWithString_attributes_(
-            f'查询 "{word}"…',
-            {
-                NSFontAttributeName: NSFont.systemFontOfSize_(15),
-                NSForegroundColorAttributeName: NSColor.tertiaryLabelColor(),
-            },
-        )
-        self._content_tv.textStorage().setAttributedString_(ph)
+        self._showLoadingOverlay(word)
 
     # ── NSTextViewDelegate — pronunciation link clicks ─────────────────────────
 
