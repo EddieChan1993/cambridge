@@ -307,6 +307,9 @@ Window size: `W=440, H=710`.
 
 ## 变更记录
 
+### 2026-07-14（第三次）
+- ♻️ 优化：发音行与黄色分隔线间距收紧（pron after 14→6pt，sep before 14→6pt）
+
 ### 2026-07-14（第二次）
 - 🆕 新增：Pill tab bar（历史/收藏）——替换 NSSegmentedControl，仿 Claude 风格胶囊切换，`tabHistClick_` / `tabFavClick_` IBAction + `_switchTab` 逻辑
 - 🆕 新增：查询 loading 动画——overlay 显示系统 NSProgressIndicator spinner + "正在查询" + 单词名，结果返回后自动停止

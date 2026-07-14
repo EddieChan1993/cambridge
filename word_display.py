@@ -171,7 +171,7 @@ def build_attributed_string(data: dict, font_size: int = 14) -> NSMutableAttribu
                 ipa_a[NSLinkAttributeName] = audio_url
             _append(mas, f"/{ipa}/", ipa_a)
             _append(mas, "  ", _attrs(f_pron, c_pron, para))   # gap not clickable
-        _append(mas, "\n", _attrs(f_pron, c_pron, _para(after=14)))
+        _append(mas, "\n", _attrs(f_pron, c_pron, _para(after=6)))
 
     f_phrase   = NSFont.boldSystemFontOfSize_(_sz(13))
     f_phrase_g = NSFont.systemFontOfSize_(_sz(11))
@@ -324,7 +324,7 @@ def build_attributed_string(data: dict, font_size: int = 14) -> NSMutableAttribu
 
         # Yellow divider — repeated ─ characters, clipped at line end
         _sep_ps = NSMutableParagraphStyle.alloc().init()
-        _sep_ps.setParagraphSpacingBefore_(14.0 if i == 0 else 20.0)
+        _sep_ps.setParagraphSpacingBefore_(6.0 if i == 0 else 16.0)
         _sep_ps.setParagraphSpacing_(12.0)
         _sep_ps.setLineBreakMode_(2)   # NSLineBreakByClipping
         _sep_ps.setTailIndent_(-50.0)  # 右侧留边距（含滚动条宽度）
