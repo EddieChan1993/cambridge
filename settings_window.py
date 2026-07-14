@@ -27,9 +27,11 @@ from AppKit import (
 
 from settings import Settings, hotkey_display, check_conflict
 
-W, H = 440, 710
-M = 24          # left/right margin
-IW = W - 2 * M  # inner width = 392
+W, H = 420, 450
+M = 20
+LABEL_W = 100
+CTRL_X  = M + LABEL_W + 8   # = 128
+CTRL_W  = W - CTRL_X - M    # = 272
 
 
 class SettingsWindowController(NSObject):
@@ -82,26 +84,19 @@ class SettingsWindowController(NSObject):
 
         c = win.contentView()
 
-        # Helpers — all coordinates expressed as (top_from_top, height).
-        # NSMakeRect uses bottom-left origin, so y = H - top - h.
-
+        # All Y coords expressed as "top from top"; NSMakeRect needs bottom-left.
         def R(x, top, w, h):
             return NSMakeRect(x, H - top - h, w, h)
 
-        def RI(top, h):  # full-width inset rect
-            return R(M, top, IW, h)
+        GRAY = NSColor.secondaryLabelColor()
 
-        def _lbl(text, top, h, bold=False, size=13, color=None, align=None):
-            f = NSTextField.alloc().initWithFrame_(RI(top, h))
+        def _row_label(text, top, h=28):
+            f = NSTextField.alloc().initWithFrame_(R(M, top, LABEL_W, h))
             f.setStringValue_(text)
             f.setBezeled_(False); f.setDrawsBackground_(False)
             f.setEditable_(False); f.setSelectable_(False)
-            f.setFont_(NSFont.boldSystemFontOfSize_(size) if bold
-                       else NSFont.systemFontOfSize_(size))
-            if color:
-                f.setTextColor_(color)
-            if align is not None:
-                f.setAlignment_(align)
+            f.setFont_(NSFont.systemFontOfSize_(13))
+            f.setTextColor_(NSColor.labelColor())
             return f
 
         def _sep(top):
@@ -111,136 +106,108 @@ class SettingsWindowController(NSObject):
             s.setBackgroundColor_(NSColor.separatorColor())
             return s
 
-        def _hotkey_field(top, value):
-            FIELD_W = IW - 8 - 92
-            f = NSTextField.alloc().initWithFrame_(R(M, top, FIELD_W, 30))
+        # ── Hotkey rows (1 & 2) ────────────────────────────────────────────────
+        HK_FIELD_W = CTRL_W - 8 - 80
+
+        def _mk_hotkey_field(top, value):
+            f = NSTextField.alloc().initWithFrame_(R(CTRL_X, top, HK_FIELD_W, 28))
             f.setStringValue_(value)
             f.setBezeled_(True); f.setBezelStyle_(1)
             f.setEditable_(False); f.setSelectable_(False)
             f.setAlignment_(NSTextAlignmentCenter)
-            f.setFont_(NSFont.monospacedSystemFontOfSize_weight_(16, 0.0))
+            f.setFont_(NSFont.monospacedSystemFontOfSize_weight_(15, 0.0))
             return f
 
-        def _record_btn(top, action):
-            btn = NSButton.alloc().initWithFrame_(R(M + IW - 92, top, 92, 30))
-            btn.setTitle_("重新录制")
+        def _mk_record_btn(top, action):
+            btn = NSButton.alloc().initWithFrame_(
+                R(CTRL_X + HK_FIELD_W + 8, top, 80, 28))
+            btn.setTitle_("录制")
             btn.setBezelStyle_(NSBezelStyleRounded)
             btn.setButtonType_(NSButtonTypeMomentaryLight)
             btn.setFont_(NSFont.systemFontOfSize_(12))
             btn.setTarget_(self); btn.setAction_(action)
             return btn
 
-        def _conflict(top):
-            f = NSTextField.alloc().initWithFrame_(RI(top, 13))
+        def _mk_conflict(top):
+            f = NSTextField.alloc().initWithFrame_(R(CTRL_X, top, CTRL_W, 14))
             f.setStringValue_("")
             f.setBezeled_(False); f.setDrawsBackground_(False)
             f.setEditable_(False)
-            f.setFont_(NSFont.systemFontOfSize_(11))
+            f.setFont_(NSFont.systemFontOfSize_(10))
             f.setTextColor_(NSColor.systemOrangeColor())
             return f
 
-        GRAY = NSColor.secondaryLabelColor()
-
-        # ── Section 1: 全局查词快捷键 ─────────────────────────────────────────
-        # top=20  title
-        # top=42  subtitle  (gap 4)
-        # top=62  hotkey row  (gap 7 after subtitle h=13 → 42+13+7=62)
-        # top=96  conflict  (gap 4)
-        # top=115 separator  (gap 6)
-        c.addSubview_(_lbl("全局查词快捷键", 20, 18, bold=True))
-        c.addSubview_(_lbl("设置划词查询的全局快捷键。录制时按 ESC 取消。",
-                           42, 13, size=11, color=GRAY))
-        hotkey_field = _hotkey_field(62, self._settings.hotkey_display_string())
+        # Row 1: 查词快捷键
+        c.addSubview_(_row_label("查词快捷键", 18))
+        hotkey_field = _mk_hotkey_field(18, self._settings.hotkey_display_string())
         c.addSubview_(hotkey_field)
-        record_btn = _record_btn(62, "startRecording:")
+        record_btn = _mk_record_btn(18, "startRecording:")
         c.addSubview_(record_btn)
-        conflict_label = _conflict(96)
+        conflict_label = _mk_conflict(50)
         c.addSubview_(conflict_label)
-        c.addSubview_(_sep(115))
 
-        # ── Section 2: 呼出主界面快捷键 ──────────────────────────────────────
-        # top=135 title  (gap 20)
-        # top=157 subtitle
-        # top=177 hotkey row
-        # top=211 conflict
-        # top=230 separator
-        c.addSubview_(_lbl("呼出主界面快捷键", 135, 18, bold=True))
-        c.addSubview_(_lbl("直接呼出/隐藏主窗口，无需选中文字。",
-                           157, 13, size=11, color=GRAY))
-        show_field = _hotkey_field(177, self._settings.show_window_display_string())
+        # Row 2: 主界面快捷键
+        c.addSubview_(_row_label("主界面快捷键", 66))
+        show_field = _mk_hotkey_field(66, self._settings.show_window_display_string())
         c.addSubview_(show_field)
-        show_record_btn = _record_btn(177, "startRecordingShow:")
+        show_record_btn = _mk_record_btn(66, "startRecordingShow:")
         c.addSubview_(show_record_btn)
-        show_conflict = _conflict(211)
+        show_conflict = _mk_conflict(98)
         c.addSubview_(show_conflict)
-        c.addSubview_(_sep(230))
 
-        # ── Section 3: 查询接口地址 ───────────────────────────────────────────
-        # top=250 title
-        # top=272 subtitle
-        # top=292 url field
-        # top=326 reset button
-        # top=356 separator
-        c.addSubview_(_lbl("查询接口地址", 250, 18, bold=True))
-        c.addSubview_(_lbl("修改后将在下次查词时生效，留空则恢复默认。",
-                           272, 13, size=11, color=GRAY))
+        c.addSubview_(_sep(116))
 
-        url_field = NSTextField.alloc().initWithFrame_(RI(292, 26))
+        # ── Row 3: 查询地址 ────────────────────────────────────────────────────
+        c.addSubview_(_row_label("查询地址", 132))
+        url_field = NSTextField.alloc().initWithFrame_(R(CTRL_X, 132, CTRL_W, 28))
         url_field.setStringValue_(self._settings.lookup_base_url)
         url_field.setBezeled_(True); url_field.setBezelStyle_(1)
         url_field.setEditable_(True)
-        url_field.setFont_(NSFont.monospacedSystemFontOfSize_weight_(11, 0.0))
+        url_field.setFont_(NSFont.systemFontOfSize_(11))
+        url_field.setTextColor_(NSColor.labelColor())
         url_field.setPlaceholderString_("https://dictionary.cambridge.org/...")
         url_field.setDelegate_(self)
         c.addSubview_(url_field)
 
-        reset_btn = NSButton.alloc().initWithFrame_(R(M, 326, 80, 22))
+        reset_btn = NSButton.alloc().initWithFrame_(
+            R(CTRL_X + CTRL_W - 80, 166, 80, 28))
         reset_btn.setTitle_("恢复默认")
         reset_btn.setBezelStyle_(NSBezelStyleRounded)
         reset_btn.setButtonType_(NSButtonTypeMomentaryLight)
-        reset_btn.setFont_(NSFont.systemFontOfSize_(11))
+        reset_btn.setFont_(NSFont.systemFontOfSize_(12))
         reset_btn.setTarget_(self); reset_btn.setAction_("resetURL:")
         c.addSubview_(reset_btn)
-        c.addSubview_(_sep(356))
 
-        # ── Section 4: 侧边栏默认状态 ─────────────────────────────────────────
-        # top=376 title
-        # top=402 checkbox
-        # top=432 separator
-        c.addSubview_(_lbl("侧边栏默认状态", 376, 18, bold=True))
+        c.addSubview_(_sep(202))
 
-        sidebar_check = NSButton.alloc().initWithFrame_(RI(402, 22))
+        # ── Row 4: 侧边栏 ──────────────────────────────────────────────────────
+        c.addSubview_(_row_label("侧边栏", 218))
+        sidebar_check = NSButton.alloc().initWithFrame_(R(CTRL_X, 218, CTRL_W, 28))
         sidebar_check.setButtonType_(3)  # NSButtonTypeSwitch
-        sidebar_check.setTitle_("启动时默认展开历史/收藏侧边栏")
+        sidebar_check.setTitle_("启动时默认展开")
         sidebar_check.setFont_(NSFont.systemFontOfSize_(13))
         sidebar_check.setState_(1 if self._settings.sidebar_open_on_start else 0)
         sidebar_check.setTarget_(self); sidebar_check.setAction_("toggleSidebarDefault:")
         c.addSubview_(sidebar_check)
-        c.addSubview_(_sep(432))
 
-        # ── Section 5: 内容字体大小 ───────────────────────────────────────────
-        # top=452 title
-        # top=474 subtitle
-        # top=494 slider row (h=22)
-        c.addSubview_(_lbl("内容字体大小", 452, 18, bold=True))
-        c.addSubview_(_lbl("拖动滑块调整，实时预览效果。",
-                           474, 13, size=11, color=GRAY))
+        c.addSubview_(_sep(254))
 
+        # ── Row 5: 字体大小 ────────────────────────────────────────────────────
         cur_size = self._settings.font_size
+        c.addSubview_(_row_label("字体大小", 270))
 
-        # Slider row layout: A [====slider====] A  16 pt
-        SROW_TOP = 494
-        SA_W, SA_H = 14, 14   # small "A"
-        BA_W, BA_H = 18, 18   # big "A"
-        PT_W, PT_H = 44, 14   # "16 pt" label
-        SLD_H = 20
-        GAP = 6
+        SA_W = 14; BA_W = 18; PT_W = 40; GAP = 6
 
-        c.addSubview_(_lbl("A", SROW_TOP + 4, SA_H, size=10, color=GRAY))
+        small_a = NSTextField.alloc().initWithFrame_(R(CTRL_X, 274, SA_W, 16))
+        small_a.setStringValue_("A")
+        small_a.setBezeled_(False); small_a.setDrawsBackground_(False)
+        small_a.setEditable_(False); small_a.setSelectable_(False)
+        small_a.setFont_(NSFont.systemFontOfSize_(10))
+        small_a.setTextColor_(GRAY)
+        c.addSubview_(small_a)
 
-        pt_x = M + IW - PT_W
-        font_size_label = NSTextField.alloc().initWithFrame_(
-            R(pt_x, SROW_TOP + 4, PT_W, PT_H))
+        pt_x = CTRL_X + CTRL_W - PT_W
+        font_size_label = NSTextField.alloc().initWithFrame_(R(pt_x, 274, PT_W, 16))
         font_size_label.setStringValue_(f"{cur_size} pt")
         font_size_label.setBezeled_(False); font_size_label.setDrawsBackground_(False)
         font_size_label.setEditable_(False); font_size_label.setSelectable_(False)
@@ -250,8 +217,7 @@ class SettingsWindowController(NSObject):
         c.addSubview_(font_size_label)
 
         big_a_x = pt_x - GAP - BA_W
-        big_a = NSTextField.alloc().initWithFrame_(
-            R(big_a_x, SROW_TOP + 2, BA_W, BA_H))
+        big_a = NSTextField.alloc().initWithFrame_(R(big_a_x, 272, BA_W, 18))
         big_a.setStringValue_("A")
         big_a.setBezeled_(False); big_a.setDrawsBackground_(False)
         big_a.setEditable_(False); big_a.setSelectable_(False)
@@ -259,10 +225,9 @@ class SettingsWindowController(NSObject):
         big_a.setTextColor_(GRAY)
         c.addSubview_(big_a)
 
-        sld_x = M + SA_W + GAP
+        sld_x = CTRL_X + SA_W + GAP
         sld_w = big_a_x - GAP - sld_x
-        font_slider = NSSlider.alloc().initWithFrame_(
-            R(sld_x, SROW_TOP + 1, sld_w, SLD_H))
+        font_slider = NSSlider.alloc().initWithFrame_(R(sld_x, 273, sld_w, 20))
         font_slider.setMinValue_(10)
         font_slider.setMaxValue_(22)
         font_slider.setIntValue_(cur_size)
@@ -272,10 +237,39 @@ class SettingsWindowController(NSObject):
         font_slider.setTarget_(self); font_slider.setAction_("fontSizeChanged:")
         c.addSubview_(font_slider)
 
+        c.addSubview_(_sep(306))
+
+        # ── Row 6: 同步路径 ────────────────────────────────────────────────────
+        c.addSubview_(_row_label("同步路径", 322))
+        sync_path_field = NSTextField.alloc().initWithFrame_(R(CTRL_X, 322, CTRL_W, 28))
+        sync_path_field.setStringValue_(self._settings.sync_data_path)
+        sync_path_field.setBezeled_(True); sync_path_field.setBezelStyle_(1)
+        sync_path_field.setEditable_(False); sync_path_field.setSelectable_(True)
+        sync_path_field.setFont_(NSFont.systemFontOfSize_(11))
+        sync_path_field.setPlaceholderString_("未设置，使用本地默认目录")
+        sync_path_field.setTextColor_(NSColor.labelColor())
+        c.addSubview_(sync_path_field)
+
+        select_btn = NSButton.alloc().initWithFrame_(R(CTRL_X, 358, 100, 28))
+        select_btn.setTitle_("选择文件夹…")
+        select_btn.setBezelStyle_(NSBezelStyleRounded)
+        select_btn.setButtonType_(NSButtonTypeMomentaryLight)
+        select_btn.setFont_(NSFont.systemFontOfSize_(12))
+        select_btn.setTarget_(self); select_btn.setAction_("selectSyncPath:")
+        c.addSubview_(select_btn)
+
+        clear_btn = NSButton.alloc().initWithFrame_(R(CTRL_X + 108, 358, 80, 28))
+        clear_btn.setTitle_("清除路径")
+        clear_btn.setBezelStyle_(NSBezelStyleRounded)
+        clear_btn.setButtonType_(NSButtonTypeMomentaryLight)
+        clear_btn.setFont_(NSFont.systemFontOfSize_(12))
+        clear_btn.setTarget_(self); clear_btn.setAction_("clearSyncPath:")
+        c.addSubview_(clear_btn)
+
         # ── Bottom buttons ─────────────────────────────────────────────────────
-        BTN_W_B, BTN_H_B, BTN_Y = 80, 28, 16
+        BTN_W, BTN_H, BTN_Y = 80, 28, 14
         save_btn = NSButton.alloc().initWithFrame_(
-            NSMakeRect(W - M - BTN_W_B, BTN_Y, BTN_W_B, BTN_H_B))
+            NSMakeRect(W - M - BTN_W, BTN_Y, BTN_W, BTN_H))
         save_btn.setTitle_("保存")
         save_btn.setBezelStyle_(NSBezelStyleRounded)
         save_btn.setButtonType_(NSButtonTypeMomentaryLight)
@@ -285,46 +279,13 @@ class SettingsWindowController(NSObject):
         c.addSubview_(save_btn)
 
         cancel_btn = NSButton.alloc().initWithFrame_(
-            NSMakeRect(W - M - BTN_W_B - 8 - BTN_W_B, BTN_Y, BTN_W_B, BTN_H_B))
+            NSMakeRect(W - M - BTN_W - 8 - BTN_W, BTN_Y, BTN_W, BTN_H))
         cancel_btn.setTitle_("取消")
         cancel_btn.setBezelStyle_(NSBezelStyleRounded)
         cancel_btn.setButtonType_(NSButtonTypeMomentaryLight)
         cancel_btn.setFont_(NSFont.systemFontOfSize_(13))
         cancel_btn.setTarget_(self); cancel_btn.setAction_("cancelSettings:")
         c.addSubview_(cancel_btn)
-
-        # ── Section 6: 数据同步路径 ─────────────────────────────────────────────
-        # top=530 sep, top=548 title, top=570 subtitle, top=591 path field,
-        # top=623 buttons row
-        c.addSubview_(_sep(530))
-        c.addSubview_(_lbl("数据同步路径", 548, 18, bold=True))
-        c.addSubview_(_lbl("收藏和历史将读写此目录，把该目录放在云盘即可多端同步。",
-                           570, 13, size=11, color=GRAY))
-
-        sync_path_field = NSTextField.alloc().initWithFrame_(RI(591, 24))
-        sync_path_field.setStringValue_(self._settings.sync_data_path)
-        sync_path_field.setBezeled_(True); sync_path_field.setBezelStyle_(1)
-        sync_path_field.setEditable_(False); sync_path_field.setSelectable_(True)
-        sync_path_field.setFont_(NSFont.monospacedSystemFontOfSize_weight_(11, 0.0))
-        sync_path_field.setPlaceholderString_("未设置，使用本地默认目录")
-        sync_path_field.setTextColor_(NSColor.labelColor())
-        c.addSubview_(sync_path_field)
-
-        select_btn = NSButton.alloc().initWithFrame_(R(M, 623, 100, 24))
-        select_btn.setTitle_("选择文件夹…")
-        select_btn.setBezelStyle_(NSBezelStyleRounded)
-        select_btn.setButtonType_(NSButtonTypeMomentaryLight)
-        select_btn.setFont_(NSFont.systemFontOfSize_(12))
-        select_btn.setTarget_(self); select_btn.setAction_("selectSyncPath:")
-        c.addSubview_(select_btn)
-
-        clear_btn = NSButton.alloc().initWithFrame_(R(M + 108, 623, 72, 24))
-        clear_btn.setTitle_("清除路径")
-        clear_btn.setBezelStyle_(NSBezelStyleRounded)
-        clear_btn.setButtonType_(NSButtonTypeMomentaryLight)
-        clear_btn.setFont_(NSFont.systemFontOfSize_(12))
-        clear_btn.setTarget_(self); clear_btn.setAction_("clearSyncPath:")
-        c.addSubview_(clear_btn)
 
         self._window          = win
         self._hotkey_field    = hotkey_field
@@ -524,12 +485,16 @@ class SettingsWindowController(NSObject):
     @objc.IBAction
     def selectSyncPath_(self, sender):
         from AppKit import NSOpenPanel
+        from Foundation import NSURL
         panel = NSOpenPanel.openPanel()
         panel.setCanChooseDirectories_(True)
         panel.setCanChooseFiles_(False)
         panel.setAllowsMultipleSelection_(False)
         panel.setTitle_("选择同步目录")
         panel.setPrompt_("选择")
+        cur = self._settings.sync_data_path
+        if cur:
+            panel.setDirectoryURL_(NSURL.fileURLWithPath_(cur))
         if panel.runModal() != 1:
             return
         path = str(panel.URLs()[0].path())

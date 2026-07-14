@@ -259,7 +259,7 @@ def build_attributed_string(data: dict, font_size: int = 14) -> NSMutableAttribu
         antonyms  = defn.get("antonyms", [])
 
         h_indent = base_indent if num is None else base_indent + INDENT
-        def_para = _para(line=3, before=10 if num and num > 1 else 0,
+        def_para = _para(line=3, before=10 if num and num > 1 else 4,
                          after=2, head=h_indent, first=base_indent)
         if num is not None:
             _append(mas, f"{_circle(num)} ", _attrs(f_num, c_num, def_para))
@@ -376,7 +376,7 @@ def build_attributed_string(data: dict, font_size: int = 14) -> NSMutableAttribu
             if pos_gram:
                 _append(mas, f" {pos_gram}",
                         _attrs(f_note, c_note, badge_para))
-            _append(mas, "\n", _attrs(f_pos, c_pos_fg, _para(after=8)))
+            _append(mas, "\n", _attrs(f_pos, c_pos_fg, _para(after=14)))
 
         real_defs = [d for d in defs if d.get("en") or d.get("zh")]
         single = len(real_defs) == 1

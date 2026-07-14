@@ -41,6 +41,10 @@ from AppKit import (
     NSTextAlignmentCenter,
     NSTextAlignmentRight,
     NSSpellChecker,
+    NSPasteboard,
+    NSStringPboardType,
+    NSFontAttributeName,
+    NSForegroundColorAttributeName,
 )
 
 from word_display import make_word_scroll_view, update_word_view
@@ -140,7 +144,18 @@ class _HoverFavButton(NSButton):
             path = NSBezierPath.bezierPathWithRoundedRect_xRadius_yRadius_(
                 self.bounds(), 6, 6)
             path.fill()
-        objc.super(_HoverFavButton, self).drawRect_(rect)
+        b = self.bounds()
+        title = self.title()
+        attrs = {
+            NSFontAttributeName: self.font(),
+            NSForegroundColorAttributeName: self.contentTintColor() or NSColor.labelColor(),
+        }
+        sz = title.sizeWithAttributes_(attrs)
+        title.drawAtPoint_withAttributes_(
+            (b.origin.x + (b.size.width  - sz.width)  / 2,
+             b.origin.y + (b.size.height - sz.height) / 2),
+            attrs
+        )
 
 
 class _HoverBtn(NSButton):
@@ -413,6 +428,7 @@ class MainWindowController(NSObject):
         self._sidebar_filter = ""
         self._search_field   = None
         self._fav_btn      = None
+        self._copy_btn     = None
         self._content_tv   = None
         self._suggest      = None
         self._build()
@@ -559,9 +575,18 @@ class MainWindowController(NSObject):
         hdr = NSView.alloc().initWithFrame_(NSMakeRect(0, hdr_y, right_w, RIGHT_HDR))
         hdr.setAutoresizingMask_(2 | 8)
 
-        # 布局：[搜索框(弹性)] [查询] [★] [☰]，右侧三个按钮钉在右边
-        # 右侧固定宽度：60(查询)+8+36(★)+8+36(☰)+8 = 156
-        fld_w = right_w - 8 - 8 - 60 - 8 - 36 - 8 - 36 - 8   # = right_w - 172
+        # 布局（从右到左，间距4px，右边距4px）：
+        # [☰ 34px] 4 [★ 34px] 4 [⎘ 34px] 6 [查询 60px] 8 [搜索框]
+        # 总右侧占用：4+34+4+34+4+34+6+60+8 = 188
+        _ICON_SZ = 34
+        _ICON_F  = NSFont.systemFontOfSize_(22)
+        _ICON_Y  = (RIGHT_HDR - _ICON_SZ) // 2
+        # x 坐标（从右向左）
+        _x_sidebar = right_w - 4 - _ICON_SZ          # right_w - 38
+        _x_fav     = _x_sidebar - 4 - _ICON_SZ       # right_w - 76
+        _x_copy    = _x_fav - 4 - _ICON_SZ           # right_w - 114
+        _x_query   = _x_copy - 6 - 60                # right_w - 180
+        fld_w      = _x_query - 8 - 8                # 左边距8 + 搜索框左padding8
 
         search_field = NSTextField.alloc().initWithFrame_(
             NSMakeRect(8, 15, fld_w, 36))
@@ -578,18 +603,27 @@ class MainWindowController(NSObject):
         hdr.addSubview_(search_field)
 
         query_btn = _btn("查询", self, "searchBtnClick:",
-                         NSMakeRect(right_w - 156, 17, 60, 32))
+                         NSMakeRect(_x_query, 17, 60, 32))
         query_btn.cell().setControlSize_(3)      # NSControlSizeLarge — 按钮渲染高度跟着变
         query_btn.setAutoresizingMask_(1 | 8)
         hdr.addSubview_(query_btn)
 
-        _ICON_Y  = (RIGHT_HDR - 36) // 2   # 36px 按钮在 66px header 里垂直居中
-        _ICON_SZ = 36
-        _ICON_F  = NSFont.systemFontOfSize_(24)
+        copy_btn = _HoverFavButton.alloc().initWithFrame_(
+            NSMakeRect(_x_copy, _ICON_Y, _ICON_SZ, _ICON_SZ))
+        copy_btn.setTitle_("⎘")
+        copy_btn.setFont_(NSFont.systemFontOfSize_(28))
+        copy_btn.setAlignment_(NSTextAlignmentCenter)
+        copy_btn.setContentTintColor_(NSColor.secondaryLabelColor())
+        copy_btn.setToolTip_("复制内容")
+        copy_btn.setTarget_(self)
+        copy_btn.setAction_("copyCurrent:")
+        copy_btn.setAutoresizingMask_(1 | 8)
+        hdr.addSubview_(copy_btn)
 
         fav_btn = _HoverFavButton.alloc().initWithFrame_(
-            NSMakeRect(right_w - 88, _ICON_Y, _ICON_SZ, _ICON_SZ))
-        fav_btn.setFont_(_ICON_F)           # 与 sidebar_btn 字号统一
+            NSMakeRect(_x_fav, _ICON_Y, _ICON_SZ, _ICON_SZ))
+        fav_btn.setFont_(_ICON_F)
+        fav_btn.setAlignment_(NSTextAlignmentCenter)
         fav_btn.setTarget_(self)
         fav_btn.setAction_("toggleFavorite:")
         fav_btn.setAutoresizingMask_(1 | 8)
@@ -597,9 +631,10 @@ class MainWindowController(NSObject):
         hdr.addSubview_(fav_btn)
 
         sidebar_btn = _HoverFavButton.alloc().initWithFrame_(
-            NSMakeRect(right_w - 44, _ICON_Y, _ICON_SZ, _ICON_SZ))
+            NSMakeRect(_x_sidebar, _ICON_Y, _ICON_SZ, _ICON_SZ))
         sidebar_btn.setTitle_("☰")
-        sidebar_btn.setFont_(_ICON_F)       # 与 fav_btn 字号相同
+        sidebar_btn.setFont_(_ICON_F)
+        sidebar_btn.setAlignment_(NSTextAlignmentCenter)
         sidebar_btn.setContentTintColor_(NSColor.secondaryLabelColor())
         sidebar_btn.setToolTip_("显示/隐藏侧边栏")
         sidebar_btn.setTarget_(self)
@@ -695,6 +730,7 @@ class MainWindowController(NSObject):
         self._sidebar_search = srch
         self._search_field = search_field
         self._fav_btn      = fav_btn
+        self._copy_btn     = copy_btn
         self._content_tv   = tv
 
         search_field.setDelegate_(self)
@@ -982,6 +1018,25 @@ class MainWindowController(NSObject):
         is_fav = dm.toggle_favorite(self._current_word, self._current_data)
         self._updateFavBtn_(is_fav)
         self.refreshFavorites()
+
+    @objc.IBAction
+    def copyCurrent_(self, sender):
+        text = self._content_tv.string()
+        if not text or not text.strip():
+            return
+        pb = NSPasteboard.generalPasteboard()
+        pb.clearContents()
+        pb.setString_forType_(text, NSStringPboardType)
+        self._copy_btn.setTitle_("✓")
+        self._copy_btn.setContentTintColor_(NSColor.systemGreenColor())
+        import threading
+        from utils import run_on_main_thread
+        def _restore():
+            def _do():
+                self._copy_btn.setTitle_("⎘")
+                self._copy_btn.setContentTintColor_(NSColor.secondaryLabelColor())
+            run_on_main_thread(_do)
+        threading.Timer(1.5, _restore).start()
 
     @objc.IBAction
     def rowDoubleClicked_(self, sender):
